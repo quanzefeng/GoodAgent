@@ -63,8 +63,8 @@
   --text-muted:   #999aab;  /* 辅助/禁用 */
 
   /* ── 强调色（琥珀） ── */
-  --accent:       #d97706;
-  --accent-hover: #f59e0b;
+  --accent:       #6366f1;
+  --accent-hover: #4f46e5;
   --accent-dim:   rgba(217, 119, 6, 0.10);
   --accent-light: rgba(217, 119, 6, 0.06);
   --accent-rgb:   217, 119, 6;
@@ -339,7 +339,7 @@ html, body {
 
 .btn.primary {
   background: var(--accent);
-  color: #000;
+  color: #fff;
   font-weight: 600;
   border-color: var(--accent);
 }
@@ -543,7 +543,7 @@ html, body {
 }
 
 .form-select {
-  appearance: auto;
+  appearance: none;
   cursor: pointer;
   font-family: var(--font-sans);
   padding: 8px 8px;
@@ -746,17 +746,30 @@ html, body {
 }
 
 .sidebar-settings-btn {
-  font-size: 12px;
-  padding: 6px 12px;
-  opacity: 0.75;
+  font-size: 13px;
+  padding: 7px 14px;
+  opacity: 0.9;
+  color: var(--accent);
+  border-color: var(--accent);
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 .sidebar-settings-btn:hover {
   opacity: 1;
+  background: var(--accent);
+  color: #fff;
 }
 .sidebar-settings-btn svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
+}
+
+#new-chat {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+#new-chat:hover {
+  background: var(--accent);
+  color: #fff;
 }
 
 .sidebar-info {
@@ -1328,7 +1341,7 @@ html, body {
   width: 100%;
   max-width: var(--chat-max-width);
   background: #ffffff;
-  border: 1px solid var(--border);
+  border: 1.8px solid #818cf8;
   border-radius: var(--radius-sm);
   padding: 4px 6px 6px 4px;
   box-sizing: border-box;
@@ -2160,3 +2173,52 @@ html, body {
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* ════════════════════════════════════════════════
+   WeChat QR Login
+   ════════════════════════════════════════════════ */
+
+.wechat-qr-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+}
+.wechat-qr-overlay.hidden { display: none; }
+.wechat-qr-card {
+  background: var(--bg-primary, #1a1a2e);
+  border-radius: 12px; padding: 24px;
+  text-align: center; min-width: 320px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  position: relative;
+}
+.wechat-qr-close {
+  position: absolute; top: 8px; right: 12px;
+  background: none; border: none; color: var(--text-secondary);
+  font-size: 22px; cursor: pointer;
+}
+.wechat-qr-container { margin: 12px 0; min-height: 280px; display: flex; align-items: center; justify-content: center; }
+.wechat-qr-status { font-size: 13px; color: var(--text-secondary); min-height: 20px; }
+.wechat-qr-status.success { color: #22c55e; }
+.wechat-qr-status.error { color: var(--danger-color, #ef4444); }
+
+.wechat-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
+}
+.wechat-badge.connected { background: rgba(34,197,94,0.15); color: #22c55e; }
+.wechat-badge.disconnected { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+.wechat-badge.error { background: rgba(239,68,68,0.15); color: var(--danger-color); }
+
+.wechat-login-status {
+  font-size: 12px; margin-top: 6px; padding: 6px 10px; border-radius: 6px;
+}
+.wechat-login-status.info { background: rgba(79,142,247,0.1); color: var(--accent); }
+.wechat-login-status.success { background: rgba(34,197,94,0.1); color: #22c55e; }
+.wechat-login-status.error { background: rgba(239,68,68,0.1); color: var(--danger-color); }
+.hidden { display: none !important; }
+
+.social-settings { padding: 8px 0; }
+.social-platform-section {
+  background: var(--bg-secondary, #1e1e2e); border-radius: 8px; padding: 16px; margin-bottom: 12px;
+}
+.social-platform-header { display: flex; align-items: center; justify-content: space-between; }
+

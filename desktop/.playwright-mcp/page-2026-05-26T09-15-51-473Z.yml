@@ -1,0 +1,36 @@
+- main [ref=e16]:
+  - generic [ref=e18]:
+    - heading "必应" [level=1] [ref=e19]:
+      - img "必应" [ref=e20] [cursor=pointer]
+    - navigation [ref=e28]:
+      - menubar [ref=e29]:
+        - menuitem "图片" [ref=e30] [cursor=pointer]:
+          - link "图片" [ref=e31]:
+            - /url: /images?FORM=Z9LH
+        - menuitem "视频" [ref=e32] [cursor=pointer]:
+          - link "视频" [ref=e33]:
+            - /url: /videos?FORM=Z9LH1
+        - menuitem "翻译" [ref=e34] [cursor=pointer]:
+          - link "翻译" [ref=e35]:
+            - /url: /search?q=%E5%BF%85%E5%BA%94%E7%BF%BB%E8%AF%91&FORM=TTAHP1
+        - menuitem "地图" [ref=e36] [cursor=pointer]:
+          - link "地图" [ref=e37]:
+            - /url: /maps?FORM=Z9LH2
+        - menuitem "学术" [ref=e38] [cursor=pointer]:
+          - link "学术" [ref=e39]:
+            - /url: /academic?FORM=Z9LHS3
+        - menuitem ". . . 更多" [ref=e40] [cursor=pointer]:
+          - text: . . .
+          - button "更多" [ref=e41]
+  - generic [ref=e42]:
+    - generic [ref=e43]:
+      - generic [ref=e44]: 国内版
+      - generic [ref=e45] [cursor=pointer]: 国际版
+    - generic [ref=e46]:
+      - generic "输入搜索词" [ref=e47]:
+        - searchbox "输入搜索词" [active] [ref=e48]
+      - button "Search using voice" [ref=e51]:
+        - img [ref=e52]
+      - button "Search"
+      - generic "搜索网页" [ref=e55] [cursor=pointer]:
+        - img [ref=e56]

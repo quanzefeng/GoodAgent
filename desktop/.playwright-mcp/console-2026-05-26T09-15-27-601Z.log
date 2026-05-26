@@ -1,0 +1,5 @@
+[     621ms] ReferenceError: sj_evt is not defined
+    at https://cn.bing.com/:6:531
+[    3019ms] [ERROR] Permissions policy violation: unload is not allowed in this document. @ https://assets.msn.cn/bundles/v1/bingHomepage/latest/microsoft.4e0b9032fe3ce039.js:1
+[    3019ms] [ERROR] Permissions policy violation: unload is not allowed in this document. @ https://assets.msn.cn/bundles/v1/bingHomepage/latest/microsoft.4e0b9032fe3ce039.js:1
+[   13062ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://adxrp.admamax.com/adxreport/cookie/sync?userId=3A01A9D591D36A4217D7BEB090B56BF2&lang=zh-cn&dgk=chrome&imd=1&pn=widgetfeed&rf=&tp=https://cn.bing.com/&gdpr=1&gdprContent=:0

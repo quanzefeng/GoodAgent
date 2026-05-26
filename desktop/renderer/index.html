@@ -62,6 +62,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             <span>MCP</span>
           </div>
+          <div class="settings-tab" data-tab="social">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span>社交</span>
+          </div>
         </div>
 
         <!-- Right Content Area -->
@@ -261,15 +265,52 @@
             </div>
           </div>
 
+          <!-- 社交平台 Panel -->
+          <div class="settings-panel" id="panel-social">
+            <div class="social-settings">
+              <p class="hint" style="margin-bottom:12px;">连接社交平台，AI 自动回复消息。</p>
+
+              <div class="social-platform-section">
+                <div class="social-platform-header">
+                  <span style="font-weight:600;">微信</span>
+                  <span id="wechat-status-badge" class="wechat-badge disconnected">未连接</span>
+                </div>
+
+                <div id="wechat-login-area">
+                  <button id="wechat-login-btn" class="btn primary" style="margin-top:8px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16.5 8h.01M8.5 8h.01M8.5 14h.01M12 14h.01M15.5 14h.01"/></svg>
+                    扫码登录
+                  </button>
+                  <button id="wechat-logout-btn" class="btn hidden" style="margin-top:8px;color:var(--danger-color);border-color:var(--danger-color);">退出登录</button>
+                </div>
+
+                <div id="wechat-login-status" class="wechat-login-status hidden"></div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
       <div class="modal-footer">
         <button id="settings-close-btn" class="btn primary">关闭</button>
       </div>
-    </div>
   </div>
+</div>
 
-  <!-- Main Chat -->
+<!-- WeChat QR Code Overlay -->
+<div id="wechat-qr-overlay" class="wechat-qr-overlay hidden">
+  <div class="wechat-qr-card">
+    <button id="wechat-qr-close" class="wechat-qr-close">×</button>
+    <h3 style="margin:0 0 12px;font-size:16px;">微信扫码登录</h3>
+    <div id="wechat-qr-container" class="wechat-qr-container">
+      <span id="wechat-qr-loading">加载中...</span>
+      <img id="wechat-qr-img" style="display:none;max-width:280px;" alt="QR Code" />
+    </div>
+    <div id="wechat-qr-status" class="wechat-qr-status">请使用微信扫描二维码</div>
+  </div>
+</div>
+
+<!-- Main Chat -->
   <div id="app">
     <!-- Sidebar -->
     <aside id="sidebar">
@@ -290,15 +331,6 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             设置
           </button>
-          <div class="sidebar-info">
-          <div class="info-item">
-            <span class="info-label">工作目录</span>
-            <span class="info-value" id="cwd-display">加载中...</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">会话</span>
-            <span class="info-value" id="session-display">—</span>
-          </div>
         </div>
       </div>
     </aside>

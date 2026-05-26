@@ -37,4 +37,13 @@ contextBridge.exposeInMainWorld("goodAgent", {
   mcpSaveAll: () => ipcRenderer.invoke("mcp:save-all"),
   mcpQuickAddSearxng: (url) => ipcRenderer.invoke("mcp:quick-add-searxng", url),
   downloadMarkdown: (content) => ipcRenderer.invoke("dialog:download-markdown", content),
+  // WeChat iLink Bridge
+  wechatGetQrcode: () => ipcRenderer.invoke("wechat:get-qrcode"),
+  wechatPollStatus: (qrcodeId) => ipcRenderer.invoke("wechat:poll-status", qrcodeId),
+  wechatLogin: (creds) => ipcRenderer.invoke("wechat:login", creds),
+  wechatLogout: () => ipcRenderer.invoke("wechat:logout"),
+  wechatGetStatus: () => ipcRenderer.invoke("wechat:get-status"),
+  onWechatBotStatus: (cb) => ipcRenderer.on("wechat:bot-status", (_e, d) => cb(d)),
+  onWechatIncoming: (cb) => ipcRenderer.on("wechat:incoming", (_e, d) => cb(d)),
+  syncApiToWechat: (cfg) => ipcRenderer.invoke("api:sync-to-wechat", cfg),
 });

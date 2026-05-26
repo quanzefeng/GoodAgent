@@ -42,5 +42,8 @@
   "devDependencies": {
     "electron": "^40.8.0",
     "electron-builder": "^26.0.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

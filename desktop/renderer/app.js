@@ -495,11 +495,13 @@ function showWelcome() {
 
 /* ── Settings Persistence ─────────────────────────────── */
 function loadApiConfig() {
+  const provider = localStorage.getItem(STORAGE_KEYS.PROVIDER) || "";
+  const apiKey = provider ? (localStorage.getItem(`goodagent_api_key_${provider}`) || "") : "";
   return {
-    provider: localStorage.getItem(STORAGE_KEYS.PROVIDER) || "",
+    provider,
     apiUrl: localStorage.getItem(STORAGE_KEYS.API_URL) || "",
     model: localStorage.getItem(STORAGE_KEYS.MODEL) || "",
-    apiKey: localStorage.getItem(STORAGE_KEYS.API_KEY) || "",
+    apiKey,
     apiFormat: localStorage.getItem(STORAGE_KEYS.API_FORMAT) || "openai",
   };
 }
@@ -508,8 +510,8 @@ function saveApiConfig(provider, apiUrl, model, apiKey, apiFormat) {
   if (apiUrl) localStorage.setItem(STORAGE_KEYS.API_URL, apiUrl);
   if (provider) localStorage.setItem(STORAGE_KEYS.PROVIDER, provider);
   if (model) localStorage.setItem(STORAGE_KEYS.MODEL, model);
-  if (apiKey) localStorage.setItem(STORAGE_KEYS.API_KEY, apiKey);
   if (apiFormat) localStorage.setItem(STORAGE_KEYS.API_FORMAT, apiFormat);
+  if (apiKey && provider) localStorage.setItem(`goodagent_api_key_${provider}`, apiKey);
 }
 
 function clearApiConfig() {
@@ -579,14 +581,15 @@ function onProviderChange() {
   if (preset && key) {
     settingsUrl.value = preset.url;
     populateModelDropdown(preset, preset.model);
-    // Auto-fetch models for local providers (LM Studio, Ollama, etc.)
     if (preset.models.length === 0 && preset.url) {
       setTimeout(fetchModels, 300);
     }
   } else {
-    // Custom provider — clear model dropdown
     populateModelDropdown(null, "");
   }
+  // Load provider-specific API key
+  const savedKey = key ? (localStorage.getItem(`goodagent_api_key_${key}`) || "") : "";
+  if (settingsKey) settingsKey.value = savedKey;
 }
 
 function normalizeApiUrl(url) {
@@ -631,6 +634,8 @@ function saveSettingsForm() {
   }
 
   saveApiConfig(provider, apiUrl, model, apiKey, apiFormat);
+  // Sync to WeChat bot config so WeChat uses updated API
+  window.goodAgent.syncApiToWechat?.({ apiUrl, apiKey, model, apiFormat }).catch(() => {});
   updateConfigBanner();
   updateInfoBar();
   if (settingsStatus) {
@@ -639,7 +644,7 @@ function saveSettingsForm() {
   }
   // Show connection status in sidebar
   const providerLabel = preset?.name || provider || apiUrl.replace(/https?:\/\//, "").split("/")[0];
-  cwdDisplay.textContent = providerLabel;
+  if (cwdDisplay) cwdDisplay.textContent = providerLabel;
   setTimeout(() => settingsStatus.className = "settings-status hidden", 3000);
 }
 
@@ -837,7 +842,7 @@ function resetChat() {
   state._toolCallCount = 0;
   state.attachedFiles = [];
   _loadedSessionId = null;
-  sessionDisplay.textContent = "—";
+  if (sessionDisplay) sessionDisplay.textContent = "—";
   sendBtn.classList.remove("hidden");
   stopBtn.classList.add("hidden");
   renderFilePreviews();
@@ -1106,7 +1111,7 @@ function setupIPC() {
   window.goodAgent.onSessionUpdate((data) => {
     state.sessionId = data.sessionId;
     if (sessionDisplay) {
-      sessionDisplay.textContent = data.sessionId || "—";
+  if (sessionDisplay) sessionDisplay.textContent = data.sessionId || "—";
     }
     // If this is a new session (not from loadChat), reset loaded flag
     if (data.sessionId && _loadedSessionId && _loadedSessionId !== data.sessionId) {
@@ -2288,12 +2293,16 @@ updateConfigBanner();
 
 // Apply saved API config status
 const cfg = loadApiConfig();
+// Auto-sync to WeChat bot on startup
+if (cfg.apiUrl && cfg.apiKey) {
+  window.goodAgent.syncApiToWechat?.({ apiUrl: cfg.apiUrl, apiKey: cfg.apiKey, model: cfg.model, apiFormat: cfg.apiFormat || "openai" }).catch(() => {});
+}
 if (cfg.provider) {
-  cwdDisplay.textContent = cfg.provider;
+  if (cwdDisplay) cwdDisplay.textContent = cfg.provider;
 } else if (cfg.apiUrl) {
-  cwdDisplay.textContent = cfg.apiUrl.replace(/https?:\/\//, "").split("/")[0];
+  if (cwdDisplay) cwdDisplay.textContent = cfg.apiUrl.replace(/https?:\/\//, "").split("/")[0];
 } else {
-  cwdDisplay.textContent = "未配置";
+  if (cwdDisplay) cwdDisplay.textContent = "未配置";
 }
 updateInfoBar();
 if (hasApiConfig()) {
@@ -2302,3 +2311,152 @@ if (hasApiConfig()) {
 
 // Load saved session list
 refreshSessionList();
+
+/* ════════════════════════════════════════════════
+   WeChat iLink QR Login + Bot
+   ════════════════════════════════════════════════ */
+
+let _wxPollTimer = null;
+
+async function initWechatStatus() {
+  try {
+    const status = await window.goodAgent.wechatGetStatus();
+    updateWechatUI(status);
+  } catch (e) { console.warn("[wechat] status:", e.message); }
+}
+
+function updateWechatUI(status) {
+  const badge = document.getElementById("wechat-status-badge");
+  const loginBtn = document.getElementById("wechat-login-btn");
+  const logoutBtn = document.getElementById("wechat-logout-btn");
+
+  if (badge) {
+    if (status.loggedIn) {
+      badge.textContent = "已连接";
+      badge.className = "wechat-badge connected";
+    } else {
+      badge.textContent = "未连接";
+      badge.className = "wechat-badge disconnected";
+    }
+  }
+  if (loginBtn) loginBtn.classList.toggle("hidden", status.loggedIn);
+  if (logoutBtn) logoutBtn.classList.toggle("hidden", !status.loggedIn);
+}
+
+function showWxStatus(msg, type) {
+  const el = document.getElementById("wechat-login-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "wechat-login-status " + (type || "info");
+  el.classList.remove("hidden");
+}
+
+function hideWxStatus() {
+  const el = document.getElementById("wechat-login-status");
+  if (el) el.classList.add("hidden");
+}
+
+// ── QR Overlay ───────────────────────────────────────────
+
+document.getElementById("wechat-login-btn")?.addEventListener("click", async () => {
+  const overlay = document.getElementById("wechat-qr-overlay");
+  const qrImg = document.getElementById("wechat-qr-img");
+  const loading = document.getElementById("wechat-qr-loading");
+  const statusEl = document.getElementById("wechat-qr-status");
+  if (overlay) overlay.classList.remove("hidden");
+  if (loading) { loading.style.display = "block"; }
+  if (qrImg) { qrImg.style.display = "none"; }
+  if (statusEl) { statusEl.textContent = "获取二维码..."; statusEl.className = "wechat-qr-status"; }
+
+  let qrcodeId = null;
+  const MAX_REFRESH = 3;
+  let refreshCount = 0;
+  let stopped = false;
+
+  // Close button
+  document.getElementById("wechat-qr-close").onclick = () => {
+    stopped = true; overlay.classList.add("hidden");
+  };
+
+  async function fetchQr() {
+    try {
+      if (loading) loading.style.display = "block";
+      if (qrImg) qrImg.style.display = "none";
+      if (statusEl) { statusEl.textContent = "获取二维码..."; statusEl.className = "wechat-qr-status"; }
+
+      const result = await window.goodAgent.wechatGetQrcode();
+      if (result.ok) {
+        qrImg.src = result.qrcodeUrl;
+        qrImg.style.display = "block";
+        if (loading) loading.style.display = "none";
+        qrcodeId = result.qrcodeId;
+        if (statusEl) { statusEl.textContent = "请使用微信扫描二维码"; statusEl.className = "wechat-qr-status"; }
+        startPoll(qrcodeId);
+      } else {
+        if (statusEl) { statusEl.textContent = "获取失败: " + (result.error || ""); statusEl.className = "wechat-qr-status error"; }
+      }
+    } catch (err) {
+      if (statusEl) { statusEl.textContent = "网络错误"; statusEl.className = "wechat-qr-status error"; }
+    }
+  }
+
+  async function startPoll(id) {
+    while (!stopped) {
+      try {
+        const r = await window.goodAgent.wechatPollStatus(id);
+        if (stopped) return;
+        if (r.status === "scanned") {
+          if (statusEl) { statusEl.textContent = "已扫码，请在手机上确认..."; statusEl.className = "wechat-qr-status"; }
+        } else if (r.status === "confirmed") {
+          if (statusEl) { statusEl.textContent = "登录成功！"; statusEl.className = "wechat-qr-status success"; }
+          // Save credentials + start bot
+          const cfg = loadApiConfig();
+          await window.goodAgent.wechatLogin({
+            botToken: r.botToken, botId: r.botId, userId: r.userId,
+            apiKey: cfg.apiKey, apiUrl: cfg.apiUrl, model: cfg.model, apiFormat: cfg.apiFormat,
+          });
+          await initWechatStatus();
+          setTimeout(() => { overlay.classList.add("hidden"); }, 1500);
+          return;
+        } else if (r.status === "expired") {
+          refreshCount++;
+          if (refreshCount >= MAX_REFRESH) {
+            if (statusEl) { statusEl.textContent = "二维码已过期，请重新打开"; statusEl.className = "wechat-qr-status error"; }
+            return;
+          }
+          await fetchQr(); return;
+        }
+        if (r.error && statusEl) { statusEl.textContent = r.error; }
+      } catch {}
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  await fetchQr();
+});
+
+// Logout
+document.getElementById("wechat-logout-btn")?.addEventListener("click", async () => {
+  await window.goodAgent.wechatLogout();
+  await initWechatStatus();
+  showWxStatus("已退出登录", "info");
+});
+
+// Bot status updates from main process
+window.goodAgent.onWechatBotStatus?.((data) => {
+  if (data.status === "connected") updateWechatUI({ loggedIn: true, status: "running" });
+  else if (data.status === "disconnected") updateWechatUI({ loggedIn: false });
+});
+
+// Incoming message notifications
+window.goodAgent.onWechatIncoming?.((data) => {
+  showWxStatus(`收到消息: ${data.text}`, "info");
+  setTimeout(hideWxStatus, 5000);
+});
+
+// Social tab click
+document.querySelector('.settings-tab[data-tab="social"]')?.addEventListener("click", () => {
+  initWechatStatus();
+});
+
+initWechatStatus();
