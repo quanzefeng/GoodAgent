@@ -83,6 +83,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span>记忆</span>
           </div>
+          <div class="settings-tab" data-tab="knowledge-base">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            <span>知识库</span>
+          </div>
           <div class="settings-tab" data-tab="agent-skills">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span>Agent 技能</span>
@@ -353,6 +357,53 @@
             </div>
           </div>
 
+          <!-- 知识库 Panel -->
+          <div class="settings-panel" id="panel-knowledge-base">
+            <div class="section-header">
+              <div class="section-header-left">
+                <h3 class="section-title">知识库 (Obsidian)</h3>
+                <span class="section-hint">混合 RAG 检索：FTS5 关键词 + 向量语义搜索</span>
+              </div>
+            </div>
+            <div class="kb-settings">
+              <div class="form-row">
+                <label class="form-label">Vault 路径</label>
+                <div style="display:flex;gap:8px;">
+                  <input type="text" id="kb-vault-path" class="form-input" placeholder="选择 Obsidian Vault 文件夹" readonly style="flex:1;" />
+                  <button id="kb-pick-vault-btn" class="btn" style="white-space:nowrap;">选择</button>
+                  <button id="kb-clear-vault-btn" class="btn" style="white-space:nowrap;">清除</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">Embedding 模型</label>
+                <select id="kb-embedding-provider" class="form-select">
+                  <option value="local">本地 MiniLM-L6（离线，推荐）</option>
+                  <option value="ollama">Ollama（需本地运行）</option>
+                  <option value="deepseek">DeepSeek API</option>
+                </select>
+              </div>
+              <div id="kb-status" class="settings-status" style="margin:8px 0;">未配置</div>
+              <div style="display:flex;gap:8px;">
+                <button id="kb-scan-btn" class="btn primary" style="flex:1;">扫描并索引</button>
+                <button id="kb-test-search-btn" class="btn" style="flex:1;">测试搜索</button>
+              </div>
+              <div id="kb-test-area" style="margin-top:12px;display:none;">
+                <input type="text" id="kb-test-query" class="form-input" placeholder="输入关键词测试搜索..." />
+                <div id="kb-test-results" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
+              </div>
+              <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+                <div class="form-row">
+                  <label class="form-label">最大注入笔记数</label>
+                  <input type="number" id="kb-max-notes" class="form-input" value="5" min="1" max="20" style="width:80px;" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label">单篇最大字数</label>
+                  <input type="number" id="kb-max-chars" class="form-input" value="500" min="100" max="2000" style="width:80px;" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Agent 技能 Panel (L2 管理, CRUD + 整理) -->
           <div class="settings-panel" id="panel-agent-skills">
             <div class="section-header">
@@ -492,13 +543,22 @@
             <span id="info-model-name"></span>
             <span id="task-indicator" class="task-indicator hidden" title="当前任务进度"></span>
             <span id="token-budget" class="token-budget hidden"></span>
-            <label id="reasoning-toggle" class="reasoning-toggle" title="深度推理">
-              <span class="reasoning-toggle-label">深度推理</span>
-              <div class="toggle-switch toggle-switch-sm">
-                <input type="checkbox" id="reasoning-checkbox" checked />
-                <span class="toggle-slider"></span>
-              </div>
-            </label>
+            <div class="toggle-group">
+              <label class="reasoning-toggle" title="知识库 RAG 检索">
+                <span class="reasoning-toggle-label">知识库</span>
+                <div class="toggle-switch toggle-switch-sm">
+                  <input type="checkbox" id="kb-toggle" />
+                  <span class="toggle-slider"></span>
+                </div>
+              </label>
+              <label id="reasoning-toggle" class="reasoning-toggle" title="深度推理">
+                <span class="reasoning-toggle-label">深度推理</span>
+                <div class="toggle-switch toggle-switch-sm">
+                  <input type="checkbox" id="reasoning-checkbox" checked />
+                  <span class="toggle-slider"></span>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
       </div>

@@ -6,11 +6,13 @@ import { existsSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSy
 import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
 import os from "node:os";
+const { homedir } = os;
 import { readFile, writeFile, mkdir, readdir, unlink } from "node:fs/promises";
 import mcpManager from "./mcp-manager.mjs";
 import sessionDb from "./session-db.mjs";
 import * as memory from "./memory-store.mjs";
 import * as skills from "./skills-store.mjs";
+import * as kb from "./knowledge-store.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 app.commandLine.appendSwitch("no-sandbox");
@@ -462,6 +464,23 @@ const TOOL_DEFS = [
       },
     },
   },
+  // ── Knowledge Base ──
+  {
+    type: "function",
+    function: {
+      name: "kb_write",
+      description: "Create or update a note in the user's knowledge base (Obsidian vault). Use this to save important findings, research results, or organized knowledge.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Relative path for the note (e.g. 'folder/note.md')" },
+          content: { type: "string", description: "Markdown content of the note" },
+          tags: { type: "array", items: { type: "string" }, description: "Optional tags for the note" },
+        },
+        required: ["path", "content"],
+      },
+    },
+  },
 ];
 
 // ── Tool Executor ──────────────────────────────────────────
@@ -745,6 +764,22 @@ async function runTool(tc) {
         }, 120_000);
       });
     }
+    // ── Knowledge Base ──
+    case "kb_write": {
+      try {
+        const { path: notePath, content: noteContent, tags } = args;
+        if (!notePath || !noteContent) return { error: "path and content required" };
+        // Check if note exists to decide create vs update
+        const existing = kb.getNote(notePath);
+        if (existing) {
+          const result = kb.updateNote(notePath, noteContent);
+          return { ...result, action: "updated", path: notePath };
+        } else {
+          const result = kb.createNote(notePath, noteContent, tags || []);
+          return { ...result, action: "created", path: notePath };
+        }
+      } catch (e) { return { error: e.message }; }
+    }
     default: {
       // Try MCP dispatch
       try {
@@ -818,13 +853,14 @@ function genId() {
 // ═══════════════════════════════════════════════════════════
 
 /** Merge static built-in tool defs with dynamic MCP tool defs. */
-function getAllToolDefs() {
+function getAllToolDefs(kbEnabled = true) {
   const mcpDefs = mcpManager.listAllToolDefs();
-  return [...TOOL_DEFS, ...mcpDefs];
+  const builtins = kbEnabled ? TOOL_DEFS : TOOL_DEFS.filter(t => t.function.name !== "kb_write");
+  return [...builtins, ...mcpDefs];
 }
 
-function toAnthropicTools() {
-  return getAllToolDefs().map(t => ({
+function toAnthropicTools(kbEnabled = true) {
+  return getAllToolDefs(kbEnabled).map(t => ({
     name: t.function.name,
     description: t.function.description,
     input_schema: t.function.parameters,
@@ -866,13 +902,11 @@ function toAnthropicMessages(msgs) {
 }
 
 // ── OpenAI-format streaming call ──
-async function openaiCall(msgs, apiUrl, apiKey, model, signal, reasoning = true) {
-  const body = { model: model || "deepseek-chat", messages: msgs, tools: getAllToolDefs(), stream: true, max_tokens: 8192 };
-  // Control reasoning behavior — DeepSeek supports reasoning_content param
-  if (reasoning === false) {
-    // Explicitly suppress reasoning_content in response
-    body.reasoning_content = null;
-  }
+async function openaiCall(msgs, apiUrl, apiKey, model, signal, reasoning = true, kbEnabled = true) {
+  const body = { model: model || "deepseek-chat", messages: msgs, tools: getAllToolDefs(kbEnabled), stream: true, max_tokens: 8192 };
+  // Control reasoning behavior — DeepSeek uses reasoning_effort param
+  // "none" disables thinking, "high" enables full reasoning (default)
+  body.reasoning_effort = reasoning ? "high" : "none";
   const res = await fetch(apiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -919,7 +953,7 @@ async function openaiCall(msgs, apiUrl, apiKey, model, signal, reasoning = true)
 }
 
 // ── Anthropic-format streaming call ──
-async function anthropicCall(msgs, apiUrl, apiKey, model, signal, reasoning = true) {
+async function anthropicCall(msgs, apiUrl, apiKey, model, signal, reasoning = true, kbEnabled = true) {
   const { messages, system } = toAnthropicMessages(msgs);
   // Normalize Anthropic endpoint URL
   const base = apiUrl.replace(/\/+$/, "");
@@ -931,7 +965,7 @@ async function anthropicCall(msgs, apiUrl, apiKey, model, signal, reasoning = tr
     max_tokens: 8192,
     system: system || "",
     messages,
-    tools: toAnthropicTools(),
+    tools: toAnthropicTools(kbEnabled),
     stream: true,
   };
   // Enable extended thinking for Anthropic when deep reasoning is on
@@ -1023,7 +1057,7 @@ function trimToBudget(text, budget) {
   return text.slice(0, half) + `\n\n...(truncated ${Math.ceil(estimateTokens(text) - budget)} tokens)...\n\n` + text.slice(-Math.floor(maxChars * 0.3));
 }
 
-function buildSystemPrompt(enabledSkills, agentName, userPrompt = "") {
+async function buildSystemPrompt(enabledSkills, agentName, userPrompt = "", kbEnabled = false) {
   const allSkills = scanSkills();
   const filterSkills = enabledSkills && enabledSkills.length > 0
     ? allSkills.filter(s => enabledSkills.includes(s.name))
@@ -1192,6 +1226,24 @@ Working directory: ${WORKSPACE}`;
         content += `\n\n<memory-context>\n**${sec.label} (摘要):**\n${trimmed}\n</memory-context>`;
       }
     }
+  }
+
+  // ── Knowledge Base RAG injection ──
+  if (kbEnabled && kb.getVault()) {
+    try {
+      const kbCfg = kb.getConfig();
+      const maxNotes = kbCfg.maxNotes || 5;
+      const maxChars = kbCfg.maxChars || 500;
+      const kbResults = await kb.search(userPrompt, maxNotes);
+      if (kbResults.length > 0) {
+        const kbContext = kbResults.map(r => {
+          let snippet = r.snippet || "";
+          if (snippet.length > maxChars) snippet = snippet.slice(0, maxChars) + "...";
+          return `**[${r.title}]** (${r.rel_path})\n${snippet}`;
+        }).join("\n\n");
+        content += `\n\n<knowledge-base>\n**用户知识库中的相关内容：**\n${kbContext}\n</knowledge-base>`;
+      }
+    } catch {}
   }
 
   return { role: "system", content };
@@ -1463,7 +1515,7 @@ Return: {"selected_memories": ["file1.md", "file2.md"]}`;
 }
 
 // ── Main agent loop ──
-async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName) {
+async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false) {
   if (abortCtrl) abortCtrl.abort();
   abortCtrl = new AbortController();
   const { signal } = abortCtrl;
@@ -1497,7 +1549,7 @@ async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", fi
     userMessage = { role: "user", content: prompt };
   }
 
-  const sysPrompt = buildSystemPrompt(enabledSkills, agentName, prompt);
+  const sysPrompt = await buildSystemPrompt(enabledSkills, agentName, prompt, kbEnabled);
 
   // ── Inject task/todo status into system context ──
   let sysContent = sysPrompt.content;
@@ -1567,7 +1619,7 @@ async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", fi
     let content = "", reasoningContent = "", tcs = [];
     try {
       const callFn = apiFormat === "anthropic" ? anthropicCall : openaiCall;
-      const result = await callFn(msgs, apiUrl, apiKey, model, signal, reasoning);
+      const result = await callFn(msgs, apiUrl, apiKey, model, signal, reasoning, kbEnabled);
       content = result.content;
       reasoningContent = result.reasoningContent || "";
       allText += result.content;
@@ -1708,11 +1760,11 @@ ${convText}
 
 // ── IPC Handlers ────────────────────────────────────────────
 
-ipcMain.handle("query:submit", async (event, { prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName }) => {
+ipcMain.handle("query:submit", async (event, { prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false }) => {
   // Cache for WeChat bot fallback
   if (apiKey && apiUrl) _lastApiConfig = { apiKey, apiUrl, model, apiFormat, agentName };
   sendToRenderer("stream:start", {});
-  try { await agentLoop(prompt, apiKey, apiUrl, model, apiFormat, files, enabledSkills, reasoning, agentName); }
+  try { await agentLoop(prompt, apiKey, apiUrl, model, apiFormat, files, enabledSkills, reasoning, agentName, kbEnabled); }
   catch (err) { sendToRenderer("stream:error", { message: err.message }); }
   sendToRenderer("stream:done", {});
 });
@@ -1876,6 +1928,32 @@ ipcMain.handle("ask:respond", (_event, { id, answers }) => {
 ipcMain.handle("skills:list", async () => {
   return scanSkills();
 });
+
+// ── Knowledge Base IPC ──────────────────────────────────────
+
+ipcMain.handle("kb:get-vault", async () => kb.getVault());
+ipcMain.handle("kb:set-vault", async (_e, path) => kb.setVault(path));
+ipcMain.handle("kb:pick-vault", async () => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showOpenDialog(win, {
+    properties: ["openDirectory"],
+    title: "选择 Obsidian Vault 文件夹",
+    defaultPath: kb.getVault() || homedir(),
+  });
+  if (result.canceled || !result.filePaths?.[0]) return { canceled: true };
+  const setResult = kb.setVault(result.filePaths[0]);
+  return { ...result, ...setResult };
+});
+ipcMain.handle("kb:config", async () => kb.getConfig());
+ipcMain.handle("kb:set-config", async (_e, cfg) => kb.setConfig(cfg));
+ipcMain.handle("kb:scan", async () => kb.rebuildIndex());
+ipcMain.handle("kb:status", async () => kb.getStatus());
+ipcMain.handle("kb:search", async (_e, query, limit) => kb.search(query, limit));
+ipcMain.handle("kb:list", async (_e, offset, limit) => kb.listNotes(offset, limit));
+ipcMain.handle("kb:get-note", async (_e, path) => kb.getNote(path));
+ipcMain.handle("kb:create-note", async (_e, { path: notePath, content, tags }) => kb.createNote(notePath, content, tags));
+ipcMain.handle("kb:update-note", async (_e, { path: notePath, content }) => kb.updateNote(notePath, content));
+ipcMain.handle("kb:delete-note", async (_e, path) => kb.deleteNote(path));
 
 // ── System Prompt Profile Store ──────────────────────────────
 let _promptStorePath = null;
