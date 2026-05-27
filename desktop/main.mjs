@@ -110,6 +110,12 @@ app.whenReady().then(async () => {
 });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 app.on("activate", () => { if (mainWindow === null) createWindow(); });
+app.on("will-quit", () => {
+  // Shutdown LSP servers if they were started
+  try {
+    import("./lsp-manager.mjs").then(m => m.default.shutdown()).catch(() => {});
+  } catch {}
+});
 
 function sendToRenderer(channel, data) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -481,6 +487,148 @@ const TOOL_DEFS = [
       },
     },
   },
+  // ── LSP Tool ──
+  {
+    type: "function",
+    function: {
+      name: "lsp",
+      description: "Language Server Protocol: go to definition, find references, hover info, document symbols. Requires a language server installed for the file's language.",
+      parameters: {
+        type: "object",
+        properties: {
+          operation: { type: "string", enum: ["goToDefinition", "findReferences", "hover", "documentSymbol"], description: "The LSP operation to perform" },
+          filePath: { type: "string", description: "Absolute path to the file" },
+          line: { type: "number", description: "Line number (1-based)" },
+          character: { type: "number", description: "Character offset (1-based)" },
+        },
+        required: ["operation", "filePath"],
+      },
+    },
+  },
+  // ── Git Tools ──
+  {
+    type: "function",
+    function: {
+      name: "git_diff",
+      description: "Show current uncommitted changes (git diff). Optionally show diff for a specific file.",
+      parameters: {
+        type: "object",
+        properties: {
+          file: { type: "string", description: "Optional: specific file path to diff" },
+          staged: { type: "boolean", description: "If true, show staged changes (git diff --cached)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "git_commit",
+      description: "Stage changes and create a git commit. If message is omitted, returns diff for AI to generate a commit message.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string", description: "Commit message. If omitted, AI will generate one from the diff." },
+          files: { type: "array", items: { type: "string" }, description: "Specific files to stage. If omitted, stages all changed files." },
+          amend: { type: "boolean", description: "If true, amend the last commit" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "git_branch",
+      description: "Create, switch, or list git branches.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["create", "switch", "list", "current"], description: "Branch action" },
+          name: { type: "string", description: "Branch name (required for create/switch)" },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  // ── GitHub (gh CLI) ──
+  {
+    type: "function",
+    function: {
+      name: "gh_pr",
+      description: "GitHub Pull Request operations via gh CLI. Create, view, list, diff, merge, or checkout PRs.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["create", "view", "list", "diff", "merge", "checkout", "close"],
+            description: "PR action: create (open new PR), view (show PR details), list (list PRs), diff (show PR diff), merge (merge PR), checkout (switch to PR branch), close (close PR without merging)",
+          },
+          title: { type: "string", description: "PR title (required for create)" },
+          body: { type: "string", description: "PR description/body (for create)" },
+          base: { type: "string", description: "Base branch (for create, default: main)" },
+          head: { type: "string", description: "Head branch (for create, default: current branch)" },
+          pr: { type: "string", description: "PR number or URL (for view/diff/merge/checkout/close)" },
+          state: { type: "string", enum: ["open", "closed", "merged", "all"], description: "Filter PRs by state (for list)" },
+          limit: { type: "number", description: "Max PRs to list (default 20)" },
+          reviewer: { type: "string", description: "Filter by reviewer (for list)" },
+          json: { type: "boolean", description: "If true, return raw JSON output" },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gh_issue",
+      description: "GitHub Issue operations via gh CLI. Create, view, list, close, comment on issues.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["create", "view", "list", "close", "reopen", "comment"],
+            description: "Issue action: create (open new issue), view (show issue details), list (list issues), close (close issue), reopen (reopen closed issue), comment (add comment to issue)",
+          },
+          title: { type: "string", description: "Issue title (required for create)" },
+          body: { type: "string", description: "Issue description (for create/comment)" },
+          issue: { type: "string", description: "Issue number or URL (for view/close/reopen/comment)" },
+          state: { type: "string", enum: ["open", "closed", "all"], description: "Filter issues by state (for list)" },
+          label: { type: "string", description: "Filter by label (for list, comma-separated)" },
+          assignee: { type: "string", description: "Filter by assignee (for list)" },
+          limit: { type: "number", description: "Max issues to list (default 20)" },
+          json: { type: "boolean", description: "If true, return raw JSON output" },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gh_repo",
+      description: "GitHub repository info via gh CLI. View repo details, list repos, view README.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["view", "list", "readme", "clone", "create"],
+            description: "Repo action: view (show repo details), list (list user repos), readme (view README), clone (clone repo), create (create new repo)",
+          },
+          repo: { type: "string", description: "Repository (owner/repo format, for view/clone)" },
+          url: { type: "string", description: "URL to clone (for clone)" },
+          name: { type: "string", description: "Repo name (for create)" },
+          description: { type: "string", description: "Repo description (for create)" },
+          private: { type: "boolean", description: "Make repo private (for create, default false)" },
+          visibility: { type: "string", enum: ["public", "private"], description: "Visibility (for list)" },
+          limit: { type: "number", description: "Max repos to list (default 20)" },
+        },
+        required: ["action"],
+      },
+    },
+  },
 ];
 
 // ── Tool Executor ──────────────────────────────────────────
@@ -488,12 +636,18 @@ const TOOL_DEFS = [
 let WORKSPACE = process.cwd();
 const MAX_OUTPUT = 12000;
 const DANGEROUS = [/rm\s+-rf/i, /Remove-Item.*-Recurse/i, /del\s+\/f/i, /rd\s+\/s/i, /format\s+\w:/i, /diskpart/i];
+const GIT_SAFE = /^git\s+(add|status|diff|commit|branch|checkout|log|show|stash|fetch|pull|push|merge|rebase|reset|remote|tag)/i;
+const GH_SAFE = /^gh\s+(pr|issue|repo|gist|auth|api|browse|codespace|secret|gpg|ssh|config|extension)/i;
 
 // On Windows, PowerShell defaults to GB2312/CodePage 936 (or other system code page).
 // We must set UTF-8 encoding explicitly to avoid ByteString errors with non-ASCII text.
 const PS_UTF8_PREFIX = '$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ';
 
-function isDangerous(cmd) { return DANGEROUS.some(p => p.test(cmd)); }
+function isDangerous(cmd) {
+  if (GIT_SAFE.test(cmd.trim())) return false;
+  if (GH_SAFE.test(cmd.trim())) return false;
+  return DANGEROUS.some(p => p.test(cmd));
+}
 
 const pendingPerms = new Map();
 let permId = 0;
@@ -530,6 +684,18 @@ function runPowerShell(command, opts = {}) {
 async function runTool(tc) {
   const { name, arguments: argsStr } = tc.function;
   const args = JSON.parse(argsStr);
+
+  // Hard block: plan mode prevents ALL write operations at execution level
+  if (planMode) {
+    const WRITE_TOOLS = new Set(["bash", "file_write", "file_edit", "create_skill", "git_commit", "git_branch"]);
+    const GH_WRITE_ACTIONS = { gh_pr: ["create", "merge", "close", "checkout"], gh_issue: ["create", "close", "reopen", "comment"], gh_repo: ["create", "clone"] };
+    if (WRITE_TOOLS.has(name)) {
+      return { error: `🚫 计划模式下禁止执行 "${name}" 操作。请先制定计划，等用户确认后再执行。` };
+    }
+    if (GH_WRITE_ACTIONS[name] && GH_WRITE_ACTIONS[name].includes(args.action)) {
+      return { error: `🚫 计划模式下禁止执行 "${name}(${args.action})" 操作。请先制定计划，等用户确认后再执行。` };
+    }
+  }
 
   switch (name) {
     case "bash": {
@@ -780,6 +946,199 @@ async function runTool(tc) {
         }
       } catch (e) { return { error: e.message }; }
     }
+    // ── LSP Tool ──
+    case "lsp": {
+      try {
+        const { default: lspManager } = await import("./lsp-manager.mjs");
+        const op = args.operation;
+        let result;
+        if (op === "goToDefinition") result = await lspManager.goToDefinition(args.filePath, args.line, args.character);
+        else if (op === "findReferences") result = await lspManager.findReferences(args.filePath, args.line, args.character);
+        else if (op === "hover") result = await lspManager.hover(args.filePath, args.line, args.character);
+        else if (op === "documentSymbol") result = await lspManager.documentSymbol(args.filePath);
+        else return { error: `Unknown LSP operation: ${op}` };
+        return { operation: op, result: result.text, resultCount: result.count };
+      } catch (e) { return { error: `LSP error: ${e.message}` }; }
+    }
+    // ── Git Diff ──
+    case "git_diff": {
+      try {
+        const cmd = args.staged ? "git diff --cached" : (args.file ? `git diff -- "${args.file}"` : "git diff");
+        const r = await runPowerShell(cmd);
+        const stat = await runPowerShell("git diff --stat");
+        return { diff: r.out || "(no changes)", stats: stat.out || "" };
+      } catch (e) { return { error: e.message }; }
+    }
+    // ── Git Commit ──
+    case "git_commit": {
+      try {
+        if (args.files && args.files.length > 0) {
+          for (const f of args.files) await runPowerShell(`git add "${f}"`);
+        } else {
+          await runPowerShell("git add -A");
+        }
+        let msg = args.message;
+        if (!msg) {
+          const diff = await runPowerShell("git diff --cached");
+          return { needsMessage: true, diff: (diff.out || "").slice(0, 8000), hint: "请根据以上 diff 生成 commit message，然后再次调用 git_commit 并传入 message 参数。" };
+        }
+        const flag = args.amend ? "--amend" : "";
+        const r = await runPowerShell(`git commit ${flag} -m "${msg.replace(/"/g, '\\"')}"`);
+        return { output: r.out || r.err, success: r.code === 0 };
+      } catch (e) { return { error: e.message }; }
+    }
+    // ── Git Branch ──
+    case "git_branch": {
+      try {
+        let r;
+        switch (args.action) {
+          case "list": r = await runPowerShell("git branch"); break;
+          case "current": r = await runPowerShell("git branch --show-current"); break;
+          case "create": r = await runPowerShell(`git checkout -b "${args.name}"`); break;
+          case "switch": r = await runPowerShell(`git checkout "${args.name}"`); break;
+          default: return { error: `Unknown action: ${args.action}` };
+        }
+        return { output: r.out || r.err, success: r.code === 0 };
+      } catch (e) { return { error: e.message }; }
+    }
+    // ── GitHub (gh CLI) ──
+    case "gh_pr": {
+      try {
+        let cmd;
+        switch (args.action) {
+          case "create": {
+            const parts = ["gh pr create"];
+            if (args.title) parts.push(`--title "${args.title.replace(/"/g, '\\"')}"`);
+            if (args.body) parts.push(`--body "${args.body.replace(/"/g, '\\"')}"`);
+            if (args.base) parts.push(`--base "${args.base}"`);
+            if (args.head) parts.push(`--head "${args.head}"`);
+            cmd = parts.join(" ");
+            break;
+          }
+          case "view": {
+            cmd = args.pr ? `gh pr view ${args.pr}` : "gh pr view";
+            if (args.json) cmd += " --json number,title,state,author,createdAt,mergedAt,url,headRefName,baseRefName,body,reviewDecision,mergeable,labels,assignees,reviews";
+            break;
+          }
+          case "list": {
+            cmd = "gh pr list";
+            if (args.state) cmd += ` --state ${args.state}`;
+            if (args.limit) cmd += ` --limit ${args.limit}`;
+            if (args.reviewer) cmd += ` --reviewer "${args.reviewer}"`;
+            if (args.json) cmd += " --json number,title,state,author,createdAt,url,headRefName,baseRefName,reviewDecision,labels";
+            break;
+          }
+          case "diff": {
+            if (!args.pr) return { error: "PR number or URL is required for diff" };
+            cmd = `gh pr diff ${args.pr}`;
+            break;
+          }
+          case "merge": {
+            cmd = args.pr ? `gh pr merge ${args.pr} --merge` : "gh pr merge --merge";
+            break;
+          }
+          case "checkout": {
+            if (!args.pr) return { error: "PR number or URL is required for checkout" };
+            cmd = `gh pr checkout ${args.pr}`;
+            break;
+          }
+          case "close": {
+            if (!args.pr) return { error: "PR number or URL is required for close" };
+            cmd = `gh pr close ${args.pr}`;
+            break;
+          }
+          default: return { error: `Unknown gh_pr action: ${args.action}` };
+        }
+        const r = await runPowerShell(cmd);
+        return { output: r.out || r.err, success: r.code === 0 };
+      } catch (e) { return { error: e.message }; }
+    }
+    case "gh_issue": {
+      try {
+        let cmd;
+        switch (args.action) {
+          case "create": {
+            const parts = ["gh issue create"];
+            if (args.title) parts.push(`--title "${args.title.replace(/"/g, '\\"')}"`);
+            if (args.body) parts.push(`--body "${args.body.replace(/"/g, '\\"')}"`);
+            cmd = parts.join(" ");
+            break;
+          }
+          case "view": {
+            cmd = args.issue ? `gh issue view ${args.issue}` : "gh issue view";
+            if (args.json) cmd += " --json number,title,state,author,createdAt,closedAt,url,body,labels,assignees,comments";
+            break;
+          }
+          case "list": {
+            cmd = "gh issue list";
+            if (args.state) cmd += ` --state ${args.state}`;
+            if (args.limit) cmd += ` --limit ${args.limit}`;
+            if (args.label) cmd += ` --label "${args.label}"`;
+            if (args.assignee) cmd += ` --assignee "${args.assignee}"`;
+            if (args.json) cmd += " --json number,title,state,author,createdAt,url,labels,assignees";
+            break;
+          }
+          case "close": {
+            if (!args.issue) return { error: "Issue number or URL is required" };
+            cmd = `gh issue close ${args.issue}`;
+            break;
+          }
+          case "reopen": {
+            if (!args.issue) return { error: "Issue number or URL is required" };
+            cmd = `gh issue reopen ${args.issue}`;
+            break;
+          }
+          case "comment": {
+            if (!args.issue) return { error: "Issue number or URL is required" };
+            if (!args.body) return { error: "Comment body is required" };
+            cmd = `gh issue comment ${args.issue} --body "${args.body.replace(/"/g, '\\"')}"`;
+            break;
+          }
+          default: return { error: `Unknown gh_issue action: ${args.action}` };
+        }
+        const r = await runPowerShell(cmd);
+        return { output: r.out || r.err, success: r.code === 0 };
+      } catch (e) { return { error: e.message }; }
+    }
+    case "gh_repo": {
+      try {
+        let cmd;
+        switch (args.action) {
+          case "view": {
+            cmd = args.repo ? `gh repo view ${args.repo}` : "gh repo view";
+            break;
+          }
+          case "list": {
+            cmd = "gh repo list";
+            if (args.limit) cmd += ` --limit ${args.limit}`;
+            if (args.visibility) cmd += ` --visibility ${args.visibility}`;
+            break;
+          }
+          case "readme": {
+            cmd = args.repo ? `gh api repos/${args.repo}/readme -q .content | python -m base64 -d 2>/dev/null || gh api repos/${args.repo}/readme -q .content` : "gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/readme -q .content";
+            break;
+          }
+          case "clone": {
+            if (!args.repo && !args.url) return { error: "Repository (owner/repo) or URL is required" };
+            const target = args.repo || args.url;
+            cmd = `gh repo clone ${target}`;
+            break;
+          }
+          case "create": {
+            if (!args.name) return { error: "Repository name is required" };
+            const parts = [`gh repo create "${args.name.replace(/"/g, '\\"')}"`];
+            if (args.description) parts.push(`--description "${args.description.replace(/"/g, '\\"')}"`);
+            if (args.private) parts.push("--private");
+            else parts.push("--public");
+            cmd = parts.join(" ");
+            break;
+          }
+          default: return { error: `Unknown gh_repo action: ${args.action}` };
+        }
+        const r = await runPowerShell(cmd);
+        return { output: r.out || r.err, success: r.code === 0 };
+      } catch (e) { return { error: e.message }; }
+    }
     default: {
       // Try MCP dispatch
       try {
@@ -842,6 +1201,14 @@ let _todoList = []; // session todo checklist
 let _askId = 0;
 const _askResolvers = new Map(); // qId -> resolve function
 
+// ── Plan Mode ───────────────────────────────────────────────
+let planMode = false;
+const PLAN_MODE_READONLY = new Set([
+  "file_read", "grep", "glob", "web_search", "web_fetch",
+  "Agent", "AskUserQuestion", "TaskList", "TodoWrite", "write_memory", "kb_write",
+  "skill", "invoke_skill", "lsp",
+]);
+
 // SYSTEM prompt is built dynamically in buildSystemPrompt(enabledSkills)
 
 function genId() {
@@ -854,9 +1221,11 @@ function genId() {
 
 /** Merge static built-in tool defs with dynamic MCP tool defs. */
 function getAllToolDefs(kbEnabled = true) {
+  let builtins = kbEnabled ? TOOL_DEFS : TOOL_DEFS.filter(t => t.function.name !== "kb_write");
+  if (planMode) builtins = builtins.filter(t => PLAN_MODE_READONLY.has(t.function.name));
   const mcpDefs = mcpManager.listAllToolDefs();
-  const builtins = kbEnabled ? TOOL_DEFS : TOOL_DEFS.filter(t => t.function.name !== "kb_write");
-  return [...builtins, ...mcpDefs];
+  console.log("[plan-mode] getAllToolDefs planMode =", planMode, "builtins =", builtins.length, "mcp =", planMode ? 0 : mcpDefs.length);
+  return planMode ? builtins : [...builtins, ...mcpDefs];
 }
 
 function toAnthropicTools(kbEnabled = true) {
@@ -903,7 +1272,9 @@ function toAnthropicMessages(msgs) {
 
 // ── OpenAI-format streaming call ──
 async function openaiCall(msgs, apiUrl, apiKey, model, signal, reasoning = true, kbEnabled = true) {
-  const body = { model: model || "deepseek-chat", messages: msgs, tools: getAllToolDefs(kbEnabled), stream: true, max_tokens: 8192 };
+  const toolDefs = getAllToolDefs(kbEnabled);
+  console.log("[openaiCall] tools sent to LLM:", toolDefs.map(t => t.function.name).join(", "));
+  const body = { model: model || "deepseek-chat", messages: msgs, tools: toolDefs, stream: true, max_tokens: 8192 };
   // Control reasoning behavior — DeepSeek uses reasoning_effort param
   // "none" disables thinking, "high" enables full reasoning (default)
   body.reasoning_effort = reasoning ? "high" : "none";
@@ -955,6 +1326,8 @@ async function openaiCall(msgs, apiUrl, apiKey, model, signal, reasoning = true,
 // ── Anthropic-format streaming call ──
 async function anthropicCall(msgs, apiUrl, apiKey, model, signal, reasoning = true, kbEnabled = true) {
   const { messages, system } = toAnthropicMessages(msgs);
+  const toolDefs = toAnthropicTools(kbEnabled);
+  console.log("[anthropicCall] tools sent to LLM:", toolDefs.map(t => t.name).join(", "));
   // Normalize Anthropic endpoint URL
   const base = apiUrl.replace(/\/+$/, "");
   const endpoint = base.endsWith("/v1/messages") ? base
@@ -965,7 +1338,7 @@ async function anthropicCall(msgs, apiUrl, apiKey, model, signal, reasoning = tr
     max_tokens: 8192,
     system: system || "",
     messages,
-    tools: toAnthropicTools(kbEnabled),
+    tools: toolDefs,
     stream: true,
   };
   // Enable extended thinking for Anthropic when deep reasoning is on
@@ -1057,7 +1430,7 @@ function trimToBudget(text, budget) {
   return text.slice(0, half) + `\n\n...(truncated ${Math.ceil(estimateTokens(text) - budget)} tokens)...\n\n` + text.slice(-Math.floor(maxChars * 0.3));
 }
 
-async function buildSystemPrompt(enabledSkills, agentName, userPrompt = "", kbEnabled = false) {
+async function buildSystemPrompt(enabledSkills, agentName, userPrompt = "", kbEnabled = false, isPlanMode = false) {
   const allSkills = scanSkills();
   const filterSkills = enabledSkills && enabledSkills.length > 0
     ? allSkills.filter(s => enabledSkills.includes(s.name))
@@ -1199,6 +1572,11 @@ Working directory: ${WORKSPACE}`;
       }
     } catch {}
   } catch {}
+
+  // ── Plan Mode injection ──
+  if (isPlanMode) {
+    content += "\n\n## ⚠️ 计划模式\n当前处于计划模式。你只能读取和分析代码，绝对不能使用 file_write、file_edit、bash 等写操作工具。\n请先制定详细的实现计划（包括文件变更清单、步骤、依赖关系），等用户确认后再执行。";
+  }
 
   // ── L0: Budget check — append memory sections, truncating if needed ──
   let baseTokens = estimateTokens(content);
@@ -1515,7 +1893,7 @@ Return: {"selected_memories": ["file1.md", "file2.md"]}`;
 }
 
 // ── Main agent loop ──
-async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false) {
+async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false, isPlanMode = false) {
   if (abortCtrl) abortCtrl.abort();
   abortCtrl = new AbortController();
   const { signal } = abortCtrl;
@@ -1549,7 +1927,7 @@ async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", fi
     userMessage = { role: "user", content: prompt };
   }
 
-  const sysPrompt = await buildSystemPrompt(enabledSkills, agentName, prompt, kbEnabled);
+  const sysPrompt = await buildSystemPrompt(enabledSkills, agentName, prompt, kbEnabled, isPlanMode);
 
   // ── Inject task/todo status into system context ──
   let sysContent = sysPrompt.content;
@@ -1760,11 +2138,13 @@ ${convText}
 
 // ── IPC Handlers ────────────────────────────────────────────
 
-ipcMain.handle("query:submit", async (event, { prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false }) => {
+ipcMain.handle("query:submit", async (event, { prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false, planMode: pm }) => {
+  planMode = !!pm;
+  console.log("[plan-mode] query:submit planMode =", planMode, "pm =", pm);
   // Cache for WeChat bot fallback
   if (apiKey && apiUrl) _lastApiConfig = { apiKey, apiUrl, model, apiFormat, agentName };
   sendToRenderer("stream:start", {});
-  try { await agentLoop(prompt, apiKey, apiUrl, model, apiFormat, files, enabledSkills, reasoning, agentName, kbEnabled); }
+  try { await agentLoop(prompt, apiKey, apiUrl, model, apiFormat, files, enabledSkills, reasoning, agentName, kbEnabled, planMode); }
   catch (err) { sendToRenderer("stream:error", { message: err.message }); }
   sendToRenderer("stream:done", {});
 });
@@ -1924,6 +2304,10 @@ ipcMain.handle("ask:respond", (_event, { id, answers }) => {
   const resolve = _askResolvers.get(id);
   if (resolve) { resolve({ answers: answers || {} }); _askResolvers.delete(id); }
 });
+
+// ── Plan Mode IPC ───────────────────────────────────────────
+ipcMain.handle("plan-mode:set", (_event, enabled) => { planMode = !!enabled; console.log("[plan-mode] setPlanMode:", enabled, "-> planMode =", planMode); return { planMode }; });
+ipcMain.handle("plan-mode:get", () => ({ planMode }));
 
 ipcMain.handle("skills:list", async () => {
   return scanSkills();

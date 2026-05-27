@@ -60,6 +60,7 @@ const statusText = $("#status-text");
 const infoModelName = $("#info-model-name");
 const taskIndicator = $("#task-indicator");
 const reasoningCheckbox = $("#reasoning-checkbox");
+const planModeCheckbox = $("#plan-mode-checkbox");
 const sessionDisplay = $("#session-display");
 const cwdDisplay = $("#cwd-display");
 const newChatBtn = $("#new-chat");
@@ -274,6 +275,12 @@ if (reasoningCheckbox) {
   reasoningCheckbox.addEventListener("change", () => {
     saveReasoningEnabled(reasoningCheckbox.checked);
   });
+  // Plan mode toggle
+  planModeCheckbox.addEventListener("change", () => {
+    window.goodAgent.setPlanMode(planModeCheckbox.checked);
+  });
+  // Load initial plan mode state
+  window.goodAgent.getPlanMode().then(r => { planModeCheckbox.checked = r.planMode; }).catch(() => {});
 }
 
 function scrollToBottom() {
@@ -841,7 +848,7 @@ async function submitQuery() {
     const reasoning = loadReasoningEnabled();
     const agentName = loadAgentName();
     const kbEnabled = document.getElementById("kb-toggle")?.checked || false;
-    await window.goodAgent.submitQuery(text, cfg.apiKey, cfg.apiUrl, cfg.model, cfg.apiFormat, apiFiles, enabledSkills, reasoning, agentName, kbEnabled);
+    await window.goodAgent.submitQuery(text, cfg.apiKey, cfg.apiUrl, cfg.model, cfg.apiFormat, apiFiles, enabledSkills, reasoning, agentName, kbEnabled, planModeCheckbox.checked);
   } catch (err) {
     console.error("Query error:", err);
   }
