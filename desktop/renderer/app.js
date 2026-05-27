@@ -2477,7 +2477,8 @@ window.goodAgent.onWechatIncoming?.((data) => {
 
 // Social tab click
 document.querySelector('.settings-tab[data-tab="social"]')?.addEventListener("click", () => {
-initWechatStatus();
+  initWechatStatus();
+});
 
 /* ════════════════════════════════════════════════
    Memory Panel (USER.md / MEMORY.md)
@@ -2523,6 +2524,184 @@ async function loadMemoryPanel() {
 }
 
 document.querySelector('.settings-tab[data-tab="memory"]')?.addEventListener("click", loadMemoryPanel);
-});
+
+/* ════════════════════════════════════════════════
+   Skills Panel
+   ════════════════════════════════════════════════ */
+
+let _skillsPanelLoaded = false;
+
+async function loadSkillsPanel() {
+  if (_skillsPanelLoaded) return;
+  _skillsPanelLoaded = true;
+  
+  // Wire manual create
+  const createBtn = document.getElementById("skill-create-btn");
+  const createForm = document.getElementById("skill-create-form");
+  if (createBtn && createForm) {
+    createBtn.onclick = () => { createForm.style.display = "block"; createBtn.style.display = "none"; };
+    document.getElementById("sk-cancel").onclick = () => { createForm.style.display = "none"; createBtn.style.display = ""; _skillsPanelLoaded = false; loadSkillsPanel(); };
+    document.getElementById("sk-save").onclick = async () => {
+      const name = document.getElementById("sk-name")?.value?.trim();
+      const desc = document.getElementById("sk-desc")?.value?.trim();
+      const steps = document.getElementById("sk-steps")?.value?.trim();
+      if (!name || !desc) return;
+      try {
+        await window.goodAgent.skillsSaveSkill(name, { name, description: desc, triggers: [name], version: "1.0.0", status: "active", created_at: new Date().toISOString() }, "## Steps\n" + (steps || "1. ") + "\n\n## Notes\n- 手动创建");
+        createForm.style.display = "none"; createBtn.style.display = "";
+        _skillsPanelLoaded = false; await loadSkillsPanel();
+      } catch (e) { alert("保存失败: " + e.message); }
+    };
+  }
+
+  await refreshSkillsList();
+}
+
+// Keep the delegated handler for the create button (capture phase)
+document.addEventListener("click", function(e) {
+  const btn = e.target.closest("#skill-create-btn");
+  if (!btn) return;
+  const form = document.getElementById("skill-create-form");
+  if (form) { form.style.display = "block"; btn.style.display = "none"; }
+}, true);
+
+async function refreshSkillsList() {
+  const container = document.getElementById("skills-list");
+  if (!container) return;
+  try {
+    const list = await window.goodAgent.skillsListAll();
+    const patterns = await window.goodAgent.skillsDetectPatterns();
+    const curator = await window.goodAgent.skillsCuratorStatus();
+
+    let html = '';
+
+    // Curator status bar
+    if (curator) {
+      html += '<div style="display:flex;align-items:center;gap:16px;padding:8px 14px;background:var(--bg-secondary);border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--text-secondary);">' +
+        '<span>活跃: <b>' + curator.activeSkills + '</b></span>' +
+        '<span>归档: ' + curator.archivedSkills + '</span>' +
+        '<span>最近: ' + (curator.lastRun !== "never" ? new Date(curator.lastRun).toLocaleString("zh-CN") : "未运行") + '</span>';
+      if (curator.pendingMerges?.length) {
+        html += '<span style="color:#f59e0b;">⚠ ' + curator.pendingMerges.length + ' 对可合并</span>';
+      }
+      html += '<button class="btn btn-sm" id="curator-run-btn" style="font-size:11px;padding:2px 8px;margin-left:auto;">运行 Curator</button></div>';
+    }
+
+    // Show detected patterns
+    if (patterns?.length) {
+      html += '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;font-size:12px;">' +
+        '<div style="font-weight:600;margin-bottom:4px;">🔍 检测到重复操作模式</div>';
+      for (const p of patterns) {
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
+          '<span><b>' + sanitize(p.phrase) + '</b> — 出现 ' + p.count + ' 次</span>' +
+          '<button class="btn btn-sm primary generate-skill-btn" data-phrase="' + sanitize(p.phrase) + '" style="font-size:10px;padding:2px 8px;">生成技能</button>' +
+          '</div>';
+      }
+      html += '</div>';
+    }
+
+    if (!list?.length && !patterns?.length) {
+      html += '<div class="skill-card"><p style="color:var(--text-secondary);text-align:center;">暂无技能。Agent 会在发现重复操作模式时自动生成，或在对话中说"创建技能"。</p></div>';
+    } else {
+      html += (list || []).map(s => `
+        <div class="skill-card">
+          <div class="skill-card-header">
+            <span class="skill-card-name">${sanitize(s.name)}</span>
+            <div class="skill-card-actions">
+              <span class="skill-status-badge ${s.status}">${s.status === "active" ? "已激活" : "已归档"}</span>
+              ${s.status === "active"
+                ? '<button class="btn btn-sm skill-archive-btn" data-skill="' + s.name + '" style="font-size:11px;padding:2px 8px;">停用</button>'
+                : '<button class="btn btn-sm skill-activate-btn" data-skill="' + s.name + '" style="font-size:11px;padding:2px 8px;">启用</button>'}
+              <button class="btn btn-sm skill-delete-btn" data-skill="${s.name}" style="font-size:11px;padding:2px 8px;color:#ef4444;">删除</button>
+            </div>
+          </div>
+          <div class="skill-card-desc">${sanitize(s.description)}</div>
+          <div class="skill-card-meta">
+            <span>使用 ${s.usage_count} 次</span>
+            <span>成功率 ${Math.round((s.success_rate||1)*100)}%</span>
+            ${s.triggers?.length ? '<span>触发词: ' + s.triggers.join(", ") + '</span>' : ''}
+          </div>
+        </div>
+      `).join("");
+    }
+    container.innerHTML = html;
+
+    // Wire up curator run
+    document.getElementById("curator-run-btn")?.addEventListener("click", async () => {
+      const btn = document.getElementById("curator-run-btn");
+      btn.disabled = true; btn.textContent = "运行中...";
+      try {
+        const result = await window.goodAgent.skillsCuratorRun();
+        alert(`Curator 完成: 归档 ${result.archived} 个，发现 ${result.dupes} 对可合并技能`);
+        await refreshSkillsList();
+      } catch (e) { alert("Curator 失败: " + e.message); }
+      btn.disabled = false; btn.textContent = "运行 Curator";
+    });
+
+    // Wire up generate buttons
+    container.querySelectorAll(".generate-skill-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const phrase = btn.dataset.phrase;
+        btn.disabled = true; btn.textContent = "生成中...";
+        try {
+          const cfg = loadApiConfig();
+          const res = await fetch((cfg.apiUrl || "").replace(/\/+$/, "") + "/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (cfg.apiKey || "") },
+            body: JSON.stringify({
+              model: cfg.model || "deepseek-chat",
+              messages: [{
+                role: "system",
+                content: "You are a skill generator. Output ONLY valid markdown with YAML frontmatter. Format:\n---\nname: lowercase-name\ndescription: \"desc\"\ntriggers: [word1, word2]\nversion: 1.0.0\nstatus: active\n---\n\n## Steps\n1. ...\n\n## Notes\n- ..."
+              }, {
+                role: "user",
+                content: "Create a reusable skill for: " + phrase + ". This is a repeated pattern in conversations."
+              }],
+              max_tokens: 2048,
+            }),
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!res.ok) throw new Error("API " + res.status);
+          const data = await res.json();
+          const skillText = data.choices?.[0]?.message?.content || "";
+
+          // Parse and save
+          const nameMatch = skillText.match(/name:\s*(\S+)/);
+          const descMatch = skillText.match(/description:\s*"([^"]+)"/);
+          const name = nameMatch?.[1] || phrase.replace(/\s+/g, "-").toLowerCase().slice(0, 30);
+
+          await window.goodAgent.skillsSaveSkill(name, {
+            name, description: (descMatch?.[1] || phrase), triggers: [phrase], version: "1.0.0", status: "active", created_at: new Date().toISOString()
+          }, skillText);
+          await refreshSkillsList();
+        } catch (e) { alert("生成失败: " + e.message); }
+        btn.disabled = false; btn.textContent = "生成技能";
+      });
+    });
+
+    // Wire up buttons
+    container.querySelectorAll(".skill-archive-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await window.goodAgent.skillsSetStatus(btn.dataset.skill, "archived");
+        await refreshSkillsList();
+      });
+    });
+    container.querySelectorAll(".skill-activate-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await window.goodAgent.skillsSetStatus(btn.dataset.skill, "active");
+        await refreshSkillsList();
+      });
+    });
+    container.querySelectorAll(".skill-delete-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("删除技能 " + btn.dataset.skill + "？")) return;
+        await window.goodAgent.skillsDelete(btn.dataset.skill);
+        await refreshSkillsList();
+      });
+    });
+  } catch (e) { console.warn("[skills]", e.message); }
+}
+
+document.querySelector('.settings-tab[data-tab="agent-skills"]')?.addEventListener("click", loadSkillsPanel);
 
 initWechatStatus();

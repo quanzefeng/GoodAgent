@@ -70,6 +70,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span>记忆</span>
           </div>
+          <div class="settings-tab" data-tab="agent-skills">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span>Agent 技能</span>
+          </div>
         </div>
 
         <!-- Right Content Area -->
@@ -313,6 +317,24 @@
                 <div id="memory-project-status" style="font-size:11px;margin-top:4px;"></div>
               </div>
             </div>
+          </div>
+
+          <!-- Agent 技能 Panel -->
+          <div class="settings-panel" id="panel-agent-skills">
+            <p class="hint" style="margin-bottom:12px;">可复用的操作流程，Agent 自动生成或手动创建。激活后对话中可通过 invoke_skill 调用。</p>
+            <div style="margin-bottom:12px;">
+              <button id="skill-create-btn" class="btn primary btn-sm">＋ 手动创建技能</button>
+            </div>
+            <div id="skill-create-form" style="display:none;padding:12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:12px;">
+              <input id="sk-name" class="form-input" placeholder="技能名称（英文小写+连字符）" style="width:100%;margin-bottom:8px;" />
+              <input id="sk-desc" class="form-input" placeholder="简短描述" style="width:100%;margin-bottom:8px;" />
+              <textarea id="sk-steps" class="memory-editor" rows="4" placeholder="1. 步骤一&#10;2. 步骤二" style="width:100%;margin-bottom:8px;"></textarea>
+              <div style="display:flex;gap:8px;">
+                <button id="sk-save" class="btn primary btn-sm">保存</button>
+                <button id="sk-cancel" class="btn btn-sm">取消</button>
+              </div>
+            </div>
+            <div id="skills-list" class="skills-list"></div>
           </div>
 
         </div>
