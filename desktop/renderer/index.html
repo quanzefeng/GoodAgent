@@ -33,6 +33,19 @@
     </div>
   </div>
 
+  <!-- Ask Question Modal -->
+  <div id="ask-modal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+      <div class="modal-header">
+        <h2 style="font-size:16px;font-weight:600;color:var(--text-primary);">🤔 需要确认</h2>
+      </div>
+      <div class="modal-body" id="ask-modal-body"></div>
+      <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 0 0;">
+        <button id="ask-submit" class="btn primary">确认</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings Modal -->
   <div id="settings-modal" class="modal">
     <div class="modal-content settings-modal-content">
@@ -102,6 +115,7 @@
                 <label class="form-label">Model</label>
                 <div class="form-row-inline-group">
                   <select id="settings-model" class="form-select" style="flex:1;"></select>
+                  <input type="text" id="settings-model-input" class="form-input" style="flex:1;display:none;" placeholder="输入模型名称，如 gpt-4o" />
                   <button id="settings-fetch-models-btn" class="btn" style="white-space:nowrap;flex-shrink:0;" title="从 API 获取可用模型列表">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M21 3v5h-5"/></svg>
                     获取模型
@@ -162,10 +176,12 @@
             </div>
           </div>
 
-          <!-- 技能 Panel -->
+          <!-- 技能 Panel (L3 本地技能, 只读浏览) -->
           <div class="settings-panel" id="panel-skills">
             <div class="skills-settings">
-              <p class="hint" style="margin-bottom:12px;">启用后，AI 可以在对话中自动加载并使用这些技能（SKILL.md）。</p>
+              <p class="hint" style="margin-bottom:12px;">
+                本地安装的技能（<code>.agents/</code> / <code>.claude/skills/</code>），Agent 可自动识别并使用。此面板为只读浏览。
+              </p>
               <div class="skills-toolbar">
                 <button id="skills-refresh-btn" class="btn">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M21 3v5h-5"/></svg>
@@ -173,8 +189,7 @@
                 </button>
                 <span id="skills-count" class="skills-count">0 个技能</span>
               </div>
-              <div id="skills-list" class="skills-list"></div>
-              <div id="skills-settings-status" class="settings-status hidden"></div>
+              <div id="local-skills-list" class="skills-list"></div>
             </div>
           </div>
 
@@ -299,42 +314,90 @@
 
           <!-- 记忆 Panel -->
           <div class="settings-panel" id="panel-memory">
-            <div style="display:flex;flex-direction:column;gap:16px;">
-              <div class="memory-editor-section">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                  <label style="font-weight:600;">USER.md — 关于你的信息</label>
-                  <button id="memory-user-save" class="btn primary btn-sm" style="font-size:12px;padding:4px 12px;">保存</button>
-                </div>
-                <textarea id="memory-user-editor" class="memory-editor" placeholder="Agent 会把关于你的信息自动记录在这里..." rows="8"></textarea>
-                <div id="memory-user-status" style="font-size:11px;margin-top:4px;"></div>
+            <div class="section-header">
+              <div class="section-header-left">
+                <h3 class="section-title">记忆管理</h3>
+                <span class="section-hint">Agent 会在对话中自动创建和更新记忆</span>
               </div>
-              <div class="memory-editor-section">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                  <label style="font-weight:600;">MEMORY.md — 项目和工作记忆</label>
-                  <button id="memory-project-save" class="btn primary btn-sm" style="font-size:12px;padding:4px 12px;">保存</button>
+              <div class="section-header-right">
+                <input type="text" id="memory-search-input" class="form-input form-input-sm" placeholder="搜索记忆..." />
+                <button id="memory-new-btn" class="btn primary btn-sm">＋ 新建</button>
+              </div>
+            </div>
+            <div class="memory-layout">
+              <div id="memory-list" class="memory-list"></div>
+              <div class="memory-editor-panel" id="memory-editor-panel">
+                <div class="memory-editor-empty">
+                  <div class="empty-icon">📝</div>
+                  <p>选择一个记忆查看或编辑<br/>或点击「＋ 新建」创建新的记忆</p>
                 </div>
-                <textarea id="memory-project-editor" class="memory-editor" placeholder="Agent 会把项目相关的重要信息自动记录在这里..." rows="8"></textarea>
-                <div id="memory-project-status" style="font-size:11px;margin-top:4px;"></div>
+                <div class="memory-editor-fields">
+                  <div class="field-row">
+                    <input type="text" id="memory-edit-name" class="form-input" placeholder="名称，如 user_role" />
+                    <select id="memory-edit-type" class="form-select form-select-sm">
+                      <option value="user">用户信息</option>
+                      <option value="feedback">用户反馈</option>
+                      <option value="project">项目上下文</option>
+                      <option value="reference">外部参考</option>
+                    </select>
+                  </div>
+                  <input type="text" id="memory-edit-desc" class="form-input" placeholder="简短描述，用于搜索匹配" />
+                </div>
+                <textarea id="memory-edit-body" class="memory-editor" rows="8" placeholder="记忆内容（支持 Markdown）..."></textarea>
+                <div class="memory-editor-actions">
+                  <button id="memory-save-btn" class="btn primary btn-sm">保存</button>
+                  <button id="memory-delete-btn" class="btn btn-sm btn-danger-ghost">删除</button>
+                  <span id="memory-edit-status" class="inline-status"></span>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Agent 技能 Panel -->
+          <!-- Agent 技能 Panel (L2 管理, CRUD + 整理) -->
           <div class="settings-panel" id="panel-agent-skills">
-            <p class="hint" style="margin-bottom:12px;">可复用的操作流程，Agent 自动生成或手动创建。激活后对话中可通过 invoke_skill 调用。</p>
-            <div style="margin-bottom:12px;">
-              <button id="skill-create-btn" class="btn primary btn-sm">＋ 手动创建技能</button>
-            </div>
-            <div id="skill-create-form" style="display:none;padding:12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:12px;">
-              <input id="sk-name" class="form-input" placeholder="技能名称（英文小写+连字符）" style="width:100%;margin-bottom:8px;" />
-              <input id="sk-desc" class="form-input" placeholder="简短描述" style="width:100%;margin-bottom:8px;" />
-              <textarea id="sk-steps" class="memory-editor" rows="4" placeholder="1. 步骤一&#10;2. 步骤二" style="width:100%;margin-bottom:8px;"></textarea>
-              <div style="display:flex;gap:8px;">
-                <button id="sk-save" class="btn primary btn-sm">保存</button>
-                <button id="sk-cancel" class="btn btn-sm">取消</button>
+            <div class="section-header">
+              <div class="section-header-left">
+                <h3 class="section-title">Agent 技能</h3>
+                <span class="section-hint">Agent 生成或手动创建的可复用操作流程</span>
+              </div>
+              <div class="section-header-right">
+                <button id="agent-skills-refresh-btn" class="btn btn-sm btn-icon-only" title="刷新">↻</button>
+                <button id="agent-skills-import-btn" class="btn btn-sm">导入</button>
+                <button id="skill-create-btn" class="btn primary btn-sm">＋ 新建技能</button>
               </div>
             </div>
-            <div id="skills-list" class="skills-list"></div>
+
+            <!-- Create form -->
+            <div id="skill-create-form" class="skill-create-form hidden">
+              <div class="form-card">
+                <div class="form-card-header">创建新技能</div>
+                <input id="sk-name" class="form-input" placeholder="技能名称（英文小写 + 连字符）" />
+                <input id="sk-desc" class="form-input" placeholder="简短描述" />
+                <textarea id="sk-steps" class="memory-editor" rows="4" placeholder="1. 步骤一&#10;2. 步骤二"></textarea>
+                <div class="form-card-actions">
+                  <button id="sk-save" class="btn primary btn-sm">保存</button>
+                  <button id="sk-cancel" class="btn btn-sm">取消</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Curator config -->
+            <div class="curator-bar">
+              <div class="curator-bar-left">
+                <span class="curator-bar-icon">🧹</span>
+                <span class="curator-bar-label">自动归档超过</span>
+                <input type="number" id="curator-days-input" class="form-input form-input-xs" value="30" min="1" max="365" />
+                <span class="curator-bar-label">天未使用的技能</span>
+                <button id="curator-save-btn" class="btn btn-xs">保存</button>
+              </div>
+              <span id="curator-status-line" class="curator-bar-status">加载中...</span>
+            </div>
+
+            <!-- Skills count -->
+            <div id="agent-skills-count" class="skills-count-bar">0 个技能</div>
+
+            <!-- Skills list -->
+            <div id="agent-skills-list" class="skills-list"></div>
           </div>
 
         </div>
@@ -423,6 +486,8 @@
           </div>
           <div id="info-bar">
             <span id="info-model-name"></span>
+            <span id="task-indicator" class="task-indicator hidden" title="当前任务进度"></span>
+            <span id="token-budget" class="token-budget hidden"></span>
             <label id="reasoning-toggle" class="reasoning-toggle" title="深度推理">
               <span class="reasoning-toggle-label">深度推理</span>
               <div class="toggle-switch toggle-switch-sm">
@@ -441,5 +506,27 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <script src="app.js"></script>
+
+<!-- Skill Editor Modal -->
+<div id="skill-editor-overlay" class="skill-editor-overlay hidden">
+  <div class="skill-editor-card">
+    <div class="skill-editor-header">
+      <h3 id="skill-editor-title">编辑技能</h3>
+      <button id="skill-editor-close" class="skill-editor-close">×</button>
+    </div>
+    <div class="skill-editor-body">
+      <input id="skill-editor-name" class="form-input" placeholder="技能名称" style="width:100%;margin-bottom:8px;" readonly />
+      <input id="skill-editor-desc" class="form-input" placeholder="简短描述" style="width:100%;margin-bottom:8px;" />
+      <input id="skill-editor-triggers" class="form-input" placeholder="触发词（逗号分隔）" style="width:100%;margin-bottom:8px;" />
+      <textarea id="skill-editor-body" class="memory-editor" rows="18" placeholder="SKILL.md 正文..." style="width:100%;font-family:var(--font-mono);font-size:13px;tab-size:2;"></textarea>
+      <div id="skill-editor-status" class="settings-status hidden" style="margin-top:4px;"></div>
+    </div>
+    <div class="skill-editor-footer">
+      <button id="skill-editor-cancel" class="btn">取消</button>
+      <button id="skill-editor-save" class="btn primary">保存</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

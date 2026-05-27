@@ -42,6 +42,8 @@ const state = {
   _thinkBuffer: "",       // buffered partial think tag across chunks
   _permResolve: null,
   _toolCallCount: 0,
+  _afterToolCall: false,  // true after a tool call completes, triggers new reasoning block
+  _reasoningBlockText: "", // text of the current reasoning block
   attachedFiles: [],       // {name, size, type, dataUrl}
 };
 
@@ -56,6 +58,7 @@ const sendBtn = $("#send-btn");
 const stopBtn = $("#stop-btn");
 const statusText = $("#status-text");
 const infoModelName = $("#info-model-name");
+const taskIndicator = $("#task-indicator");
 const reasoningCheckbox = $("#reasoning-checkbox");
 const sessionDisplay = $("#session-display");
 const cwdDisplay = $("#cwd-display");
@@ -71,6 +74,7 @@ const settingsTabs = $("#settings-tabs");
 const settingsProvider = $("#settings-provider");
 const settingsUrl = $("#settings-url");
 const settingsModel = $("#settings-model");
+const settingsModelInput = $("#settings-model-input");
 const settingsKey = $("#settings-key");
 const settingsSaveBtn = $("#settings-save-btn");
 const settingsStatus = $("#settings-status");
@@ -372,12 +376,30 @@ function updateThinkingSection(msgEl, text) {
   const section = getOrCreateThinkingSection();
   if (!section) return;
   if (!section.hasAttribute("open")) section.setAttribute("open", "");
-  let el = section.querySelector(".thinking-reasoning");
-  if (!el) {
+  const tc = section.querySelector(".thinking-content");
+
+  // After a tool call, start a new reasoning block
+  if (state._afterToolCall) {
+    state._afterToolCall = false;
+    state._reasoningBlockText = "";
+  }
+
+  state._reasoningBlockText = text;
+
+  // Find or create the last reasoning div
+  let el = null;
+  const children = tc.children;
+  for (let i = children.length - 1; i >= 0; i--) {
+    if (children[i].classList.contains("thinking-reasoning")) {
+      el = children[i];
+      break;
+    }
+  }
+  // If no reasoning div, or last child is a tool-entry, create new
+  if (!el || (tc.lastElementChild && tc.lastElementChild.classList.contains("tool-entry"))) {
     el = document.createElement("div");
     el.className = "thinking-reasoning";
-    const tc = section.querySelector(".thinking-content");
-    tc.insertBefore(el, tc.firstChild);
+    tc.appendChild(el);
   }
   el.textContent = text;
 }
@@ -496,7 +518,7 @@ function showWelcome() {
 /* ── Settings Persistence ─────────────────────────────── */
 function loadApiConfig() {
   const provider = localStorage.getItem(STORAGE_KEYS.PROVIDER) || "";
-  const apiKey = provider ? (localStorage.getItem(`goodagent_api_key_${provider}`) || "") : "";
+  const apiKey = localStorage.getItem(provider ? `goodagent_api_key_${provider}` : "goodagent_api_key") || "";
   return {
     provider,
     apiUrl: localStorage.getItem(STORAGE_KEYS.API_URL) || "",
@@ -508,10 +530,10 @@ function loadApiConfig() {
 
 function saveApiConfig(provider, apiUrl, model, apiKey, apiFormat) {
   if (apiUrl) localStorage.setItem(STORAGE_KEYS.API_URL, apiUrl);
-  if (provider) localStorage.setItem(STORAGE_KEYS.PROVIDER, provider);
+  localStorage.setItem(STORAGE_KEYS.PROVIDER, provider);
   if (model) localStorage.setItem(STORAGE_KEYS.MODEL, model);
   if (apiFormat) localStorage.setItem(STORAGE_KEYS.API_FORMAT, apiFormat);
-  if (apiKey && provider) localStorage.setItem(`goodagent_api_key_${provider}`, apiKey);
+  if (apiKey) localStorage.setItem(provider ? `goodagent_api_key_${provider}` : "goodagent_api_key", apiKey);
 }
 
 function clearApiConfig() {
@@ -531,11 +553,20 @@ function updateConfigBanner() {
   }
 }
 
+function getCurrentModelValue() {
+  if (settingsModelInput && settingsModelInput.style.display !== "none") {
+    return settingsModelInput.value;
+  }
+  return settingsModel?.value || "";
+}
+
 function populateModelDropdown(preset, selectedModel) {
   if (!settingsModel) return;
-  // Clear existing options
-  settingsModel.innerHTML = "";
   if (preset && preset.models && preset.models.length > 0) {
+    // Has preset models — show <select>, hide <input>
+    settingsModel.style.display = "";
+    if (settingsModelInput) settingsModelInput.style.display = "none";
+    settingsModel.innerHTML = "";
     preset.models.forEach(m => {
       const opt = document.createElement("option");
       opt.value = m.id;
@@ -543,7 +574,6 @@ function populateModelDropdown(preset, selectedModel) {
       if (m.id === selectedModel) opt.selected = true;
       settingsModel.appendChild(opt);
     });
-    // If the saved/selected model isn't in the list, prepend it
     if (selectedModel && !preset.models.some(m => m.id === selectedModel)) {
       const customOpt = document.createElement("option");
       customOpt.value = selectedModel;
@@ -552,12 +582,12 @@ function populateModelDropdown(preset, selectedModel) {
       settingsModel.insertBefore(customOpt, settingsModel.firstChild);
     }
   } else {
-    // No preset models — show a placeholder
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = selectedModel || "请手动输入模型名称";
-    placeholder.selected = true;
-    settingsModel.appendChild(placeholder);
+    // No preset models — show <input> for manual entry, hide <select>
+    settingsModel.style.display = "none";
+    if (settingsModelInput) {
+      settingsModelInput.style.display = "";
+      settingsModelInput.value = selectedModel || "";
+    }
   }
 }
 
@@ -588,7 +618,7 @@ function onProviderChange() {
     populateModelDropdown(null, "");
   }
   // Load provider-specific API key
-  const savedKey = key ? (localStorage.getItem(`goodagent_api_key_${key}`) || "") : "";
+  const savedKey = localStorage.getItem(key ? `goodagent_api_key_${key}` : "goodagent_api_key") || "";
   if (settingsKey) settingsKey.value = savedKey;
 }
 
@@ -613,7 +643,7 @@ function normalizeApiUrl(url) {
 function saveSettingsForm() {
   const provider = settingsProvider?.value || "";
   const rawUrl = (settingsUrl?.value || "").trim();
-  const model = (settingsModel?.value || "").trim();
+  const model = getCurrentModelValue().trim();
   const apiKey = (settingsKey?.value || "").trim();
   const preset = PROVIDER_PRESETS[provider];
   const apiFormat = preset?.format || "openai";
@@ -710,6 +740,7 @@ async function fetchModels() {
     // Populate the model dropdown with fetched models
     const select = document.getElementById("settings-model");
     if (select) {
+      select.style.display = "";
       select.innerHTML = "";
       models.forEach(m => {
         const opt = document.createElement("option");
@@ -717,11 +748,11 @@ async function fetchModels() {
         opt.textContent = m.label;
         select.appendChild(opt);
       });
-      // Auto-select first model if none selected
       if (select.value === "" && models.length > 0) {
         select.value = models[0].id;
       }
     }
+    if (settingsModelInput) settingsModelInput.style.display = "none";
     if (settingsStatus) {
       settingsStatus.textContent = `✅ 获取到 ${models.length} 个模型`;
       settingsStatus.className = "settings-status success";
@@ -751,8 +782,9 @@ async function submitQuery() {
   }
 
   // Fallback: use currently selected model in settings dropdown if not yet persisted
-  if (!cfg.model && settingsModel?.value) {
-    cfg.model = settingsModel.value.trim();
+  if (!cfg.model) {
+    const fallbackModel = getCurrentModelValue();
+    if (fallbackModel) cfg.model = fallbackModel.trim();
   }
 
   // Clear input and files
@@ -765,6 +797,8 @@ async function submitQuery() {
   state.isStreaming = true;
   state.currentText = "";
   state._toolCallCount = 0;
+  state._afterToolCall = false;
+  state._reasoningBlockText = "";
 
   // Hide welcome, show messages
   const welcome = messageList.querySelector(".welcome");
@@ -840,8 +874,14 @@ function resetChat() {
   state._thinkBuffer = "";
   state.currentAssistantMsg = null;
   state._toolCallCount = 0;
+  state._afterToolCall = false;
+  state._reasoningBlockText = "";
   state.attachedFiles = [];
   _loadedSessionId = null;
+  // Clear task/todo state
+  _taskCache.clear();
+  _todoCache.length = 0;
+  updateTaskIndicator(null, null, null, []);
   if (sessionDisplay) sessionDisplay.textContent = "—";
   sendBtn.classList.remove("hidden");
   stopBtn.classList.add("hidden");
@@ -867,7 +907,10 @@ function refreshSessionList() {
     container.innerHTML = sessions.map(s => `
       <div class="session-item ${_loadedSessionId === s.id ? "active" : ""}" data-session-id="${s.id}">
         <div class="session-item-title" title="${sanitize(s.title || "(无标题)")}">${sanitize((s.title || "(无标题)").slice(0, 28))}</div>
-        <button class="session-delete" data-session-id="${s.id}" title="删除此会话">×</button>
+        <div class="session-item-actions">
+          <button class="session-export" data-session-id="${s.id}" title="导出为 Markdown">↓</button>
+          <button class="session-delete" data-session-id="${s.id}" title="删除此会话">×</button>
+        </div>
       </div>
     `).join("");
   }).catch(() => {});
@@ -905,6 +948,8 @@ function loadChat(sessionId) {
     state.currentText = "";
     state.currentAssistantMsg = null;
     state._toolCallCount = 0;
+    state._afterToolCall = false;
+    state._reasoningBlockText = "";
     sendBtn.classList.remove("hidden");
     stopBtn.classList.add("hidden");
     sendBtn.disabled = false;
@@ -934,7 +979,7 @@ function loadChat(sessionId) {
   }).catch(() => {});
 }
 
-// Delegate click events on session-list (handles both load and delete)
+// Delegate click events on session-list (handles load, delete, export)
 document.addEventListener("click", (e) => {
   const deleteBtn = e.target.closest(".session-delete");
   if (deleteBtn) {
@@ -945,6 +990,64 @@ document.addEventListener("click", (e) => {
         if (_loadedSessionId === id) _loadedSessionId = null;
         refreshSessionList();
       });
+    }
+    return;
+  }
+
+  const exportBtn = e.target.closest(".session-export");
+  if (exportBtn) {
+    e.stopPropagation();
+    const id = exportBtn.dataset.sessionId;
+    if (id) {
+      window.goodAgent.exportSessionMarkdown(id).then(data => {
+        if (data?.markdown) {
+          const blob = new Blob([data.markdown], { type: "text/markdown;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = `${data.title || "session"}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      });
+    }
+    return;
+  }
+
+  const editBtn = e.target.closest(".msg-edit-btn");
+  if (editBtn) {
+    e.stopPropagation();
+    const msgEl = editBtn.closest(".message");
+    const textEl = editBtn.closest(".message-bubble")?.querySelector("p");
+    if (!msgEl || !textEl) return;
+    const oldText = textEl.textContent || "";
+    const input = document.createElement("textarea");
+    input.value = oldText;
+    input.className = "msg-edit-input";
+    input.style.width = "100%"; input.style.minHeight = "60px";
+    textEl.replaceWith(input);
+    editBtn.textContent = "✓";
+    editBtn.classList.add("saving");
+    editBtn.onclick = async () => {
+      const newText = input.value.trim();
+      if (!newText || newText === oldText) { undoEdit(); return; }
+      const msgId = msgEl.dataset.msgId;
+      if (msgId) {
+        await window.goodAgent.editMessage(parseInt(msgId), newText);
+      }
+      const p = document.createElement("p");
+      p.textContent = newText;
+      input.replaceWith(p);
+      editBtn.textContent = "✎";
+      editBtn.classList.remove("saving");
+      editBtn.onclick = null;
+    };
+    function undoEdit() {
+      const p = document.createElement("p");
+      p.textContent = oldText;
+      input.replaceWith(p);
+      editBtn.textContent = "✎";
+      editBtn.classList.remove("saving");
+      editBtn.onclick = null;
     }
     return;
   }
@@ -974,6 +1077,7 @@ function getOrCreateThinkingSection() {
 
 function addToolCall(name, args) {
   state._toolCallCount++;
+  state._afterToolCall = true;
   const section = getOrCreateThinkingSection();
   if (!section) return;
 
@@ -987,7 +1091,7 @@ function addToolCall(name, args) {
   entry.innerHTML = `
     <div class="tool-entry-head">
       <span class="tool-entry-icon">🛠</span>
-      <span class="tool-entry-name">${sanitize(name)}</span>
+      <span class="tool-entry-name">${sanitize(name.toLowerCase())}</span>
       <span class="tool-entry-status">运行中...</span>
     </div>
     <div class="tool-entry-args">${argsStr || ""}</div>
@@ -1009,6 +1113,74 @@ function completeToolCall(name, result) {
   el.querySelector(".tool-entry-result").innerHTML = summary;
   el.classList.add("tool-done");
   scrollToBottom();
+}
+
+/* ── Task indicator ──────────────────────────────────── */
+const _taskCache = new Map(); // taskId -> { subject, status }
+const _todoCache = [];        // current todo list
+
+function updateTaskIndicator(subject, taskId, newStatus, todos) {
+  if (taskId && subject) _taskCache.set(taskId, { subject, status: "pending" });
+  if (taskId && newStatus) {
+    const cached = _taskCache.get(taskId);
+    if (cached) cached.status = newStatus;
+  }
+  if (todos) { _todoCache.length = 0; _todoCache.push(...todos); }
+
+  const active = Array.from(_taskCache.values()).filter(t => t.status !== "completed" && t.status !== "deleted");
+  const todoActive = _todoCache.filter(t => t.status !== "completed");
+  const total = active.length + todoActive.length;
+
+  if (total === 0) {
+    taskIndicator.classList.add("hidden");
+    taskIndicator.classList.remove("has-active");
+    taskIndicator.textContent = "";
+  } else {
+    taskIndicator.classList.remove("hidden");
+    taskIndicator.classList.add("has-active");
+    const parts = [];
+    if (active.length > 0) parts.push(`${active.length} 个任务`);
+    if (todoActive.length > 0) parts.push(`${todoActive.length} 个 todo`);
+    taskIndicator.textContent = "📋 " + parts.join(" · ");
+    taskIndicator.title = active.map(t => `${t.status === "in_progress" ? "🔄" : "⬜"} ${t.subject}`).join("\n");
+  }
+}
+
+/* ── Ask Question dialog ────────────────────────────── */
+let _askResolve = null;
+const askModal = $("#ask-modal");
+const askModalBody = $("#ask-modal-body");
+const askSubmit = $("#ask-submit");
+
+function showAskQuestion(data) {
+  return new Promise(resolve => {
+    _askResolve = resolve;
+    const { questions } = data;
+    askModalBody.innerHTML = questions.map((q, qi) => {
+      const inputType = q.multiSelect ? "checkbox" : "radio";
+      const name = `ask_q_${qi}`;
+      return `<div style="margin-bottom:16px;">
+        <div style="font-weight:600;margin-bottom:6px;font-size:14px;">${q.header ? `<span style="background:var(--bg-tertiary);padding:1px 6px;border-radius:3px;font-size:12px;margin-right:6px;">${q.header.replace(/</g,'&lt;')}</span>` : ""}${q.question.replace(/</g,'&lt;')}</div>
+        ${q.options.map((o, oi) => `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;margin:4px 0;border-radius:6px;cursor:pointer;background:var(--bg-secondary);">
+          <input type="${inputType}" name="${name}" value="${oi}" style="margin-top:2px;flex-shrink:0;" />
+          <div><div style="font-size:13px;font-weight:500;">${o.label.replace(/</g,'&lt;')}</div><div style="font-size:12px;color:var(--text-muted);">${o.description.replace(/</g,'&lt;')}</div></div>
+        </label>`).join("")}
+      </div>`;
+    }).join("");
+    askSubmit.onclick = () => {
+      const answers = {};
+      questions.forEach((q, qi) => {
+        const checked = askModalBody.querySelectorAll(`input[name="ask_q_${qi}"]:checked`);
+        if (checked.length > 0) {
+          answers[q.question] = Array.from(checked).map(c => q.options[parseInt(c.value)].label).join(",");
+        }
+      });
+      askModal.classList.remove("active");
+      _askResolve = null;
+      resolve(answers);
+    };
+    askModal.classList.add("active");
+  });
 }
 
 /* ── Permission dialog ───────────────────────────────── */
@@ -1034,6 +1206,19 @@ window.goodAgent.onPermissionRequest((data) => {
   showPermission(data).then((allow) => {
     window.goodAgent.respondPermission(data.id, allow);
     state._permResolve = null;
+  });
+});
+
+// Render question from AskUserQuestion tool
+window.goodAgent.onAskQuestion((data) => {
+  if (_askResolve) {
+    // Already showing a question dialog — auto-close old one
+    _askResolve({});
+    _askResolve = null;
+    askModal.classList.remove("active");
+  }
+  showAskQuestion(data).then((answers) => {
+    window.goodAgent.respondQuestion(data.id, answers);
   });
 });
 
@@ -1092,14 +1277,32 @@ function setupIPC() {
     const section = getOrCreateThinkingSection();
     if (!section) return;
     if (!section.hasAttribute("open")) section.setAttribute("open", "");
-    let reasoningEl = section.querySelector(".thinking-reasoning");
-    if (!reasoningEl) {
+    const tc = section.querySelector(".thinking-content");
+
+    // After a tool call, start a new reasoning block
+    if (state._afterToolCall) {
+      state._afterToolCall = false;
+      state._reasoningBlockText = "";
+    }
+
+    state._reasoningBlockText += data.text;
+
+    // Find or create the last reasoning div in thinking-content
+    let reasoningEl = null;
+    const children = tc.children;
+    for (let i = children.length - 1; i >= 0; i--) {
+      if (children[i].classList.contains("thinking-reasoning")) {
+        reasoningEl = children[i];
+        break;
+      }
+    }
+    // If no reasoning div exists, or the last child is a tool-entry, create new
+    if (!reasoningEl || (tc.lastElementChild && tc.lastElementChild.classList.contains("tool-entry"))) {
       reasoningEl = document.createElement("div");
       reasoningEl.className = "thinking-reasoning";
-      const tc = section.querySelector(".thinking-content");
-      tc.insertBefore(reasoningEl, tc.firstChild);
+      tc.appendChild(reasoningEl);
     }
-    reasoningEl.textContent = state.currentReasoning;
+    reasoningEl.textContent = state._reasoningBlockText;
     scrollToBottom();
   });
 
@@ -1127,7 +1330,23 @@ function setupIPC() {
 
   window.goodAgent.onToolResult((data) => {
     completeToolCall(data.name, data.result);
+    // Update task indicator for task management tools
+    if (data.name === "TaskCreate" && data.result?.task) {
+      updateTaskIndicator(data.result.task.subject, data.result.task.id, "pending");
+    } else if (data.name === "TaskUpdate" && data.result?.success) {
+      updateTaskIndicator(null, data.result.taskId, data.result.updatedFields?.includes("status") ? data.result.statusChange?.to : null);
+    } else if (data.name === "TodoWrite" && data.result?.newTodos) {
+      updateTaskIndicator(null, null, null, data.result.newTodos);
+    }
   });
+
+  try {
+    window.goodAgent.onTaskClear?.(() => {
+      _taskCache.clear();
+      _todoCache.length = 0;
+      updateTaskIndicator(null, null, null, []);
+    });
+  } catch (e) { /* preload may not be updated yet */ }
 
   window.goodAgent.onSessionUpdate((data) => {
     state.sessionId = data.sessionId;
@@ -1140,6 +1359,31 @@ function setupIPC() {
     }
     // Refresh session list when a new session is created
     refreshSessionList();
+  });
+
+  window.goodAgent.onL0Budget((data) => {
+    const el = document.getElementById("token-budget");
+    if (!el) return;
+    el.classList.remove("hidden");
+    if (data.overHard) {
+      el.textContent = `⚠️ ${data.estimatedTokens.toLocaleString()} tokens`;
+      el.className = "token-budget danger";
+      el.title = `超过硬限制 ${data.hardThreshold.toLocaleString()}，将被截断`;
+    } else if (data.overWarn) {
+      el.textContent = `⚡ ${data.estimatedTokens.toLocaleString()} tokens`;
+      el.className = "token-budget warn";
+      el.title = `接近限制 ${data.hardThreshold.toLocaleString()}`;
+    } else {
+      // Only show when above 4000, otherwise hide
+      if (data.estimatedTokens < 4000) {
+        el.classList.add("hidden");
+        el.textContent = "";
+        return;
+      }
+      el.textContent = `${data.estimatedTokens.toLocaleString()} tokens`;
+      el.className = "token-budget ok";
+      el.title = "系统提示词的估算 token 数（含记忆/任务/技能等上下文）";
+    }
   });
 }
 
@@ -1474,20 +1718,21 @@ if (resetUserAvatarBtn) {
 const SKILLS_KEY = "goodagent_enabled_skills";
 
 async function loadAndRenderSkills() {
-  const listEl = document.getElementById("skills-list");
+  const listEl = document.getElementById("local-skills-list");
   const countEl = document.getElementById("skills-count");
   if (!listEl) return;
   try {
-    listEl.innerHTML = '<div class="skills-loading">正在扫描技能...</div>';
+    listEl.innerHTML = '<div class="skills-loading">正在扫描 L3 本地技能...</div>';
     const skills = await window.goodAgent.listSkills();
     if (!skills || skills.length === 0) {
-      listEl.innerHTML = '<div class="skills-empty">未找到技能。<br/>技能存放在 <code>C:\\Users\\7\\.agents\\</code> 或 <code>C:\\Users\\7\\.claude\\skills\\</code> 目录下。</div>';
+      listEl.innerHTML = '<div class="skills-empty">未找到本地技能。<br/>技能存放在 <code>.agents/</code> 或 <code>.claude/skills/</code> 目录下。</div>';
       if (countEl) countEl.textContent = "0 个技能";
       return;
     }
     if (countEl) countEl.textContent = `${skills.length} 个技能`;
 
     const enabled = loadEnabledSkills();
+
     listEl.innerHTML = skills.map(s => {
       const isOn = enabled.includes(s.name);
       return `<div class="skill-card">
@@ -1496,8 +1741,8 @@ async function loadAndRenderSkills() {
           <div class="skill-card-meta">
             <span class="skill-card-source">${s.source === "agents" ? "🤖 .agents" : "📦 .claude"}</span>
             ${s.version ? `<span class="skill-card-version">v${sanitize(s.version)}</span>` : ""}
-            ${s.triggers.length > 0 ? `<span class="skill-card-triggers">触发: ${sanitize(s.triggers.slice(0, 3).join(", "))}</span>` : ""}
-            ${s.allowedTools.length > 0 ? `<span class="skill-card-tools">${s.allowedTools.length} 个工具</span>` : ""}
+            ${s.triggers && s.triggers.length > 0 ? `<span class="skill-card-triggers">触发: ${sanitize(s.triggers.slice(0, 3).join(", "))}</span>` : ""}
+            ${s.allowedTools && s.allowedTools.length > 0 ? `<span class="skill-card-tools">${s.allowedTools.length} 个工具</span>` : ""}
           </div>
         </div>
         <label class="skill-toggle">
@@ -1507,23 +1752,22 @@ async function loadAndRenderSkills() {
       </div>`;
     }).join("");
 
-    // Bind toggle events
     listEl.querySelectorAll(".skill-toggle-input").forEach(cb => {
       cb.addEventListener("change", () => {
         const name = cb.dataset.skill;
-        const enabled = loadEnabledSkills();
+        const en = loadEnabledSkills();
         if (cb.checked) {
-          if (!enabled.includes(name)) enabled.push(name);
+          if (!en.includes(name)) en.push(name);
         } else {
-          const idx = enabled.indexOf(name);
-          if (idx >= 0) enabled.splice(idx, 1);
+          const idx = en.indexOf(name);
+          if (idx >= 0) en.splice(idx, 1);
         }
-        saveEnabledSkills(enabled);
+        saveEnabledSkills(en);
       });
     });
   } catch (err) {
     console.error("[skills] load error:", err);
-    listEl.innerHTML = '<div class="skills-empty" style="color:var(--danger);">加载技能失败</div>';
+    listEl.innerHTML = '<div class="skills-empty" style="color:var(--danger);">加载本地技能失败</div>';
   }
 }
 
@@ -1540,13 +1784,205 @@ function saveEnabledSkills(skills) {
 
 document.getElementById("skills-refresh-btn")?.addEventListener("click", loadAndRenderSkills);
 
-// Load skills when the skills tab is opened
+// Load L3 skills when the "技能" tab is opened
 document.querySelector('.settings-tab[data-tab="skills"]')?.addEventListener("click", () => {
-  // Load only if list is empty or shows placeholder
-  const listEl = document.getElementById("skills-list");
+  const listEl = document.getElementById("local-skills-list");
   if (listEl && (listEl.children.length === 0 || listEl.querySelector(".skills-empty, .skills-loading"))) {
     loadAndRenderSkills();
   }
+});
+
+// Load curator config when "Agent技能" tab is opened
+document.querySelector('.settings-tab[data-tab="agent-skills"]')?.addEventListener("click", () => {
+  loadCuratorConfig();
+});
+
+// ── Curator config ─────────────────────────────────────────
+async function loadCuratorConfig() {
+  try {
+    const status = await window.goodAgent.skillsCuratorStatus();
+    const el = document.getElementById("curator-days-input");
+    const line = document.getElementById("curator-status-line");
+    if (el) el.value = status.archiveAfterDays ?? 30;
+    if (line) {
+      const lastRun = status.lastRun ? new Date(status.lastRun).toLocaleString("zh-CN") : "从未";
+      line.textContent = `状态: ${status.activeSkills} 活跃, ${status.archivedSkills} 已存档 | 上次运行: ${lastRun}`;
+    }
+  } catch {}
+}
+
+document.getElementById("curator-save-btn")?.addEventListener("click", async () => {
+  const input = document.getElementById("curator-days-input");
+  if (!input) return;
+  const days = parseInt(input.value, 10);
+  if (isNaN(days) || days < 1) { alert("请输入 1-365 之间的天数"); return; }
+  try {
+    await window.goodAgent.skillsCuratorConfig({ archiveAfterDays: days });
+    loadCuratorConfig();
+    const line = document.getElementById("curator-status-line");
+    if (line) line.textContent += " ✅ 已保存";
+  } catch (e) {
+    alert("保存失败: " + e.message);
+  }
+});
+
+// ── Skill Editor Modal ──────────────────────────────────────
+// Use event delegation for dynamically created edit/export buttons
+document.addEventListener("click", async (e) => {
+  // Edit button
+  const editBtn = e.target.closest(".skill-edit-btn");
+  if (editBtn) {
+    const name = editBtn.dataset.skill;
+    await openSkillEditor(name);
+    return;
+  }
+  // Export button
+  const exportBtn = e.target.closest(".skill-export-btn");
+  if (exportBtn) {
+    const name = exportBtn.dataset.skill;
+    await exportSkillAsJson(name);
+    return;
+  }
+});
+
+async function openSkillEditor(name) {
+  const overlay = document.getElementById("skill-editor-overlay");
+  const titleEl = document.getElementById("skill-editor-title");
+  const nameEl = document.getElementById("skill-editor-name");
+  const descEl = document.getElementById("skill-editor-desc");
+  const triggersEl = document.getElementById("skill-editor-triggers");
+  const bodyEl = document.getElementById("skill-editor-body");
+  const statusEl = document.getElementById("skill-editor-status");
+  if (!overlay || !nameEl) return;
+
+  try {
+    statusEl.className = "settings-status";
+    statusEl.textContent = "加载中...";
+    statusEl.classList.remove("hidden");
+
+    // Try L2 managed store first, fall back to L3 scanned skills
+    let skill = await window.goodAgent.skillsLoadOne(name);
+    if (!skill) {
+      skill = await window.goodAgent.loadSkill(name);
+    }
+    if (!skill) { throw new Error("技能不存在"); }
+
+    titleEl.textContent = `编辑技能 — ${skill.name || name}`;
+    nameEl.value = skill.name || name;
+    descEl.value = skill.description || "";
+    triggersEl.value = (skill.triggers || []).join(", ");
+    bodyEl.value = skill.body || "";
+    overlay.dataset.editName = name;
+    overlay.dataset.editSource = skill.source || "local"; // track where it came from
+    overlay.classList.remove("hidden");
+
+    statusEl.classList.add("hidden");
+  } catch (err) {
+    statusEl.textContent = "加载失败: " + err.message;
+    statusEl.className = "settings-status error";
+    statusEl.classList.remove("hidden");
+  }
+}
+
+document.getElementById("skill-editor-close")?.addEventListener("click", () => {
+  document.getElementById("skill-editor-overlay")?.classList.add("hidden");
+});
+document.getElementById("skill-editor-cancel")?.addEventListener("click", () => {
+  document.getElementById("skill-editor-overlay")?.classList.add("hidden");
+});
+// Close on overlay click
+document.getElementById("skill-editor-overlay")?.addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add("hidden");
+});
+
+document.getElementById("skill-editor-save")?.addEventListener("click", async () => {
+  const overlay = document.getElementById("skill-editor-overlay");
+  const nameEl = document.getElementById("skill-editor-name");
+  const descEl = document.getElementById("skill-editor-desc");
+  const triggersEl = document.getElementById("skill-editor-triggers");
+  const bodyEl = document.getElementById("skill-editor-body");
+  const statusEl = document.getElementById("skill-editor-status");
+  if (!overlay || !nameEl) return;
+
+  const saveBtn = document.getElementById("skill-editor-save");
+  const origText = saveBtn.textContent;
+  saveBtn.disabled = true; saveBtn.textContent = "保存中...";
+
+  try {
+    const origName = overlay.dataset.editName;
+    const name = nameEl.value.trim();
+    if (!name) throw new Error("名称不能为空");
+
+    const triggers = triggersEl.value.split(",").map(s => s.trim()).filter(Boolean);
+    const meta = {
+      name,
+      description: descEl.value.trim(),
+      triggers,
+      // Preserve original name in meta if changed (for rename)
+      ...(origName !== name ? { _origin: origName } : {}),
+    };
+    const body = bodyEl.value;
+
+    await window.goodAgent.skillsSaveSkill(name, meta, body);
+    overlay.classList.add("hidden");
+    // Refresh the agent-skills list (L2), since editor saves to L2
+    if (typeof refreshSkillsList === "function") refreshSkillsList();
+  } catch (err) {
+    statusEl.textContent = "保存失败: " + err.message;
+    statusEl.className = "settings-status error";
+    statusEl.classList.remove("hidden");
+  } finally {
+    saveBtn.disabled = false; saveBtn.textContent = origText;
+  }
+});
+
+// ── Skill Export/Import ────────────────────────────────────
+async function exportSkillAsJson(name) {
+  try {
+    let skill = await window.goodAgent.skillsLoadOne(name);
+    if (!skill) {
+      skill = await window.goodAgent.loadSkill(name);
+    }
+    if (!skill) throw new Error("技能不存在");
+    const json = JSON.stringify({ name: skill.name, description: skill.description, triggers: skill.triggers || [], body: skill.body || "" }, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${skill.name || name}.skill.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert("导出失败: " + err.message);
+  }
+}
+
+document.getElementById("agent-skills-import-btn")?.addEventListener("click", () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.body && !data.steps) throw new Error("无效的技能文件: 缺少 body 或 steps");
+      const meta = { name: data.name || file.name.replace(/\.[^.]+$/, ""), description: data.description || "", triggers: data.triggers || [] };
+      const body = data.body || (Array.isArray(data.steps) ? data.steps.map((s, i) => `${i + 1}. ${s}`).join("\n") : "");
+      await window.goodAgent.skillsSaveSkill(meta.name, meta, body);
+      if (typeof refreshSkillsList === "function") refreshSkillsList();
+    } catch (err) {
+      alert("导入失败: " + err.message);
+    }
+  };
+  input.click();
+});
+
+// Agent skills refresh
+document.getElementById("agent-skills-refresh-btn")?.addEventListener("click", () => {
+  _skillsPanelLoaded = false;
+  loadSkillsPanel();
 });
 
 /* ── MCP Servers ──────────────────────────────────────── */
@@ -2481,46 +2917,143 @@ document.querySelector('.settings-tab[data-tab="social"]')?.addEventListener("cl
 });
 
 /* ════════════════════════════════════════════════
-   Memory Panel (USER.md / MEMORY.md)
+   Memory Panel (multi-file with frontmatter)
    ════════════════════════════════════════════════ */
 
 let _memoryPanelLoaded = false;
+let _memoryListCache = [];
+let _memoryCurrentFile = null;
+
+const TYPE_LABELS = { user: "👤 用户", feedback: "💬 反馈", project: "📋 项目", reference: "🔗 参考" };
 
 async function loadMemoryPanel() {
   if (_memoryPanelLoaded) return;
   _memoryPanelLoaded = true;
 
-  const userEl = document.getElementById("memory-user-editor");
-  const projectEl = document.getElementById("memory-project-editor");
+  const listEl = document.getElementById("memory-list");
+  const searchInput = document.getElementById("memory-search-input");
+  const nameInput = document.getElementById("memory-edit-name");
+  const descInput = document.getElementById("memory-edit-desc");
+  const typeSelect = document.getElementById("memory-edit-type");
+  const bodyTextarea = document.getElementById("memory-edit-body");
+  const saveBtn = document.getElementById("memory-save-btn");
+  const deleteBtn = document.getElementById("memory-delete-btn");
+  const newBtn = document.getElementById("memory-new-btn");
+  const statusEl = document.getElementById("memory-edit-status");
 
-  try {
-    const user = await window.goodAgent.memoryReadUser();
-    const project = await window.goodAgent.memoryReadProject();
-    if (userEl) userEl.value = user;
-    if (projectEl) projectEl.value = project;
-  } catch (e) { console.warn("[memory] load:", e.message); }
-
-  document.getElementById("memory-user-save")?.addEventListener("click", async () => {
-    const btn = document.getElementById("memory-user-save");
-    btn.disabled = true; btn.textContent = "保存中...";
+  // Refresh list
+  async function refreshList(filter = "") {
     try {
-      await window.goodAgent.memoryWriteUser(userEl.value);
-      document.getElementById("memory-user-status").textContent = "✅ 已保存";
-      setTimeout(() => { document.getElementById("memory-user-status").textContent = ""; }, 2000);
-    } catch (e) { document.getElementById("memory-user-status").textContent = "❌ 保存失败"; }
-    btn.disabled = false; btn.textContent = "保存";
+      _memoryListCache = await window.goodAgent.memoryListAll();
+    } catch (e) {
+      // Fallback: use legacy read functions
+      _memoryListCache = [];
+    }
+    const filtered = filter
+      ? _memoryListCache.filter(m => m.name.includes(filter) || m.description.includes(filter) || m.filename.includes(filter))
+      : _memoryListCache;
+
+    listEl.innerHTML = filtered.length === 0
+      ? '<div class="memory-list-empty">暂无记忆</div><div class="memory-list-empty-hint">Agent 会在对话中自动创建</div>'
+      : filtered.map(m => {
+        const badge = `<span class="memory-type-badge ${m.type}">${TYPE_LABELS[m.type] || m.type}</span>`;
+        const activeClass = _memoryCurrentFile === m.filename ? " active" : "";
+        return `<div class="memory-list-item${activeClass}" data-file="${m.filename}">
+          <div class="memory-list-item-name">${badge}<span>${m.name.replace(/</g,'&lt;')}</span></div>
+          <div class="memory-list-item-desc">${m.description.replace(/</g,'&lt;') || "(无描述)"}</div>
+        </div>`;
+      }).join("");
+
+    // Bind clicks
+    listEl.querySelectorAll(".memory-list-item").forEach(el => {
+      el.addEventListener("click", () => selectMemory(el.dataset.file));
+    });
+  }
+
+  // Select a memory
+  async function selectMemory(filename) {
+    _memoryCurrentFile = filename;
+    try {
+      const m = await window.goodAgent.memoryReadOne(filename);
+      if (m) {
+        nameInput.value = m.name || "";
+        descInput.value = m.description || "";
+        typeSelect.value = m.type || "project";
+        bodyTextarea.value = m.body || "";
+        statusEl.textContent = "";
+      }
+    } catch (e) {
+      // Fallback: try legacy
+    }
+    await refreshList(searchInput?.value || "");
+  }
+
+  // New memory
+  function newMemory() {
+    _memoryCurrentFile = null;
+    nameInput.value = "";
+    descInput.value = "";
+    typeSelect.value = "project";
+    bodyTextarea.value = "";
+    statusEl.textContent = "";
+    refreshList(searchInput?.value || "");
+  }
+
+  // Save
+  saveBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    const desc = descInput.value.trim();
+    const type = typeSelect.value;
+    const body = bodyTextarea.value;
+    if (!name) { statusEl.textContent = "❌ 名称不能为空"; return; }
+
+    statusEl.textContent = "保存中...";
+    try {
+      if (_memoryCurrentFile) {
+        await window.goodAgent.memoryUpdate(_memoryCurrentFile, body, name, desc, type);
+      } else {
+        await window.goodAgent.memoryCreate(name, desc, type, body);
+      }
+      statusEl.textContent = "✅ 已保存";
+      setTimeout(() => { statusEl.textContent = ""; }, 2000);
+      await refreshList(searchInput?.value || "");
+      // Select the newly created/updated item
+      if (!_memoryCurrentFile) {
+        const safe = name.replace(/[^a-zA-Z0-9_\-一-鿿]/g, "_");
+        _memoryCurrentFile = safe + ".md";
+      }
+      await refreshList(searchInput?.value || "");
+    } catch (e) {
+      statusEl.textContent = "❌ 保存失败: " + e.message;
+    }
   });
 
-  document.getElementById("memory-project-save")?.addEventListener("click", async () => {
-    const btn = document.getElementById("memory-project-save");
-    btn.disabled = true; btn.textContent = "保存中...";
+  // Delete
+  deleteBtn.addEventListener("click", async () => {
+    if (!_memoryCurrentFile) return;
+    if (!confirm(`删除记忆 "${_memoryCurrentFile}"？此操作不可撤销。`)) return;
     try {
-      await window.goodAgent.memoryWriteProject(projectEl.value);
-      document.getElementById("memory-project-status").textContent = "✅ 已保存";
-      setTimeout(() => { document.getElementById("memory-project-status").textContent = ""; }, 2000);
-    } catch (e) { document.getElementById("memory-project-status").textContent = "❌ 保存失败"; }
-    btn.disabled = false; btn.textContent = "保存";
+      await window.goodAgent.memoryDelete(_memoryCurrentFile);
+      _memoryCurrentFile = null;
+      nameInput.value = ""; descInput.value = ""; bodyTextarea.value = "";
+      statusEl.textContent = "✅ 已删除";
+      setTimeout(() => { statusEl.textContent = ""; }, 2000);
+      await refreshList(searchInput?.value || "");
+    } catch (e) {
+      statusEl.textContent = "❌ 删除失败: " + e.message;
+    }
   });
+
+  // New button
+  newBtn.addEventListener("click", newMemory);
+
+  // Search
+  searchInput.addEventListener("input", () => {
+    refreshList(searchInput.value);
+  });
+
+  // Initial load
+  await refreshList();
 }
 
 document.querySelector('.settings-tab[data-tab="memory"]')?.addEventListener("click", loadMemoryPanel);
@@ -2539,8 +3072,8 @@ async function loadSkillsPanel() {
   const createBtn = document.getElementById("skill-create-btn");
   const createForm = document.getElementById("skill-create-form");
   if (createBtn && createForm) {
-    createBtn.onclick = () => { createForm.style.display = "block"; createBtn.style.display = "none"; };
-    document.getElementById("sk-cancel").onclick = () => { createForm.style.display = "none"; createBtn.style.display = ""; _skillsPanelLoaded = false; loadSkillsPanel(); };
+    createBtn.onclick = () => { createForm.classList.remove("hidden"); createBtn.style.display = "none"; };
+    document.getElementById("sk-cancel").onclick = () => { createForm.classList.add("hidden"); createBtn.style.display = ""; };
     document.getElementById("sk-save").onclick = async () => {
       const name = document.getElementById("sk-name")?.value?.trim();
       const desc = document.getElementById("sk-desc")?.value?.trim();
@@ -2562,11 +3095,11 @@ document.addEventListener("click", function(e) {
   const btn = e.target.closest("#skill-create-btn");
   if (!btn) return;
   const form = document.getElementById("skill-create-form");
-  if (form) { form.style.display = "block"; btn.style.display = "none"; }
+  if (form) { form.classList.remove("hidden"); btn.style.display = "none"; }
 }, true);
 
 async function refreshSkillsList() {
-  const container = document.getElementById("skills-list");
+  const container = document.getElementById("agent-skills-list");
   if (!container) return;
   try {
     const list = await window.goodAgent.skillsListAll();
@@ -2577,54 +3110,66 @@ async function refreshSkillsList() {
 
     // Curator status bar
     if (curator) {
-      html += '<div style="display:flex;align-items:center;gap:16px;padding:8px 14px;background:var(--bg-secondary);border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--text-secondary);">' +
-        '<span>活跃: <b>' + curator.activeSkills + '</b></span>' +
-        '<span>归档: ' + curator.archivedSkills + '</span>' +
-        '<span>最近: ' + (curator.lastRun !== "never" ? new Date(curator.lastRun).toLocaleString("zh-CN") : "未运行") + '</span>';
-      if (curator.pendingMerges?.length) {
-        html += '<span style="color:#f59e0b;">⚠ ' + curator.pendingMerges.length + ' 对可合并</span>';
-      }
-      html += '<button class="btn btn-sm" id="curator-run-btn" style="font-size:11px;padding:2px 8px;margin-left:auto;">运行 Curator</button></div>';
+      const lastRunText = curator.lastRun !== "never" ? new Date(curator.lastRun).toLocaleString("zh-CN") : "未运行";
+      html += '<div class="curator-info-bar">' +
+        '<div class="curator-info-stats">' +
+          '<span>活跃 <b>' + curator.activeSkills + '</b> 个</span>' +
+          '<span class="curator-info-sep">·</span>' +
+          '<span>归档 ' + curator.archivedSkills + '</span>' +
+          '<span class="curator-info-sep">·</span>' +
+          '<span>上次: ' + lastRunText + '</span>' +
+          (curator.pendingMerges?.length ? '<span class="curator-info-warn">⚠ ' + curator.pendingMerges.length + ' 对可合并</span>' : '') +
+        '</div>' +
+        '<button class="btn btn-xs" id="curator-run-btn">立即整理</button>' +
+      '</div>';
     }
 
     // Show detected patterns
     if (patterns?.length) {
-      html += '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;font-size:12px;">' +
-        '<div style="font-weight:600;margin-bottom:4px;">🔍 检测到重复操作模式</div>';
+      html += '<div class="patterns-card">' +
+        '<div class="patterns-card-header">🔍 检测到重复操作模式</div>';
       for (const p of patterns) {
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
+        html += '<div class="patterns-item">' +
           '<span><b>' + sanitize(p.phrase) + '</b> — 出现 ' + p.count + ' 次</span>' +
-          '<button class="btn btn-sm primary generate-skill-btn" data-phrase="' + sanitize(p.phrase) + '" style="font-size:10px;padding:2px 8px;">生成技能</button>' +
-          '</div>';
+          '<button class="btn btn-xs primary generate-skill-btn" data-phrase="' + sanitize(p.phrase) + '">生成技能</button>' +
+        '</div>';
       }
       html += '</div>';
     }
 
     if (!list?.length && !patterns?.length) {
-      html += '<div class="skill-card"><p style="color:var(--text-secondary);text-align:center;">暂无技能。Agent 会在发现重复操作模式时自动生成，或在对话中说"创建技能"。</p></div>';
+      html += '<div class="skill-card skill-card-empty">暂无技能。Agent 会在发现重复操作模式时自动生成，或在对话中说「创建技能」。</div>';
     } else {
       html += (list || []).map(s => `
         <div class="skill-card">
           <div class="skill-card-header">
-            <span class="skill-card-name">${sanitize(s.name)}</span>
-            <div class="skill-card-actions">
+            <div class="skill-card-name">
+              <span>${sanitize(s.name)}</span>
               <span class="skill-status-badge ${s.status}">${s.status === "active" ? "已激活" : "已归档"}</span>
+            </div>
+            <div class="skill-card-actions">
+              <button class="btn btn-xs skill-edit-btn" data-skill="${sanitize(s.name)}">编辑</button>
+              <button class="btn btn-xs skill-export-btn" data-skill="${sanitize(s.name)}">导出</button>
               ${s.status === "active"
-                ? '<button class="btn btn-sm skill-archive-btn" data-skill="' + s.name + '" style="font-size:11px;padding:2px 8px;">停用</button>'
-                : '<button class="btn btn-sm skill-activate-btn" data-skill="' + s.name + '" style="font-size:11px;padding:2px 8px;">启用</button>'}
-              <button class="btn btn-sm skill-delete-btn" data-skill="${s.name}" style="font-size:11px;padding:2px 8px;color:#ef4444;">删除</button>
+                ? '<button class="btn btn-xs skill-archive-btn" data-skill="' + s.name + '">停用</button>'
+                : '<button class="btn btn-xs skill-activate-btn" data-skill="' + s.name + '">启用</button>'}
+              <button class="btn btn-xs skill-delete-btn" data-skill="${s.name}" style="color:#ef4444;">删除</button>
             </div>
           </div>
           <div class="skill-card-desc">${sanitize(s.description)}</div>
           <div class="skill-card-meta">
-            <span>使用 ${s.usage_count} 次</span>
-            <span>成功率 ${Math.round((s.success_rate||1)*100)}%</span>
-            ${s.triggers?.length ? '<span>触发词: ' + s.triggers.join(", ") + '</span>' : ''}
+            <span>使用 <b>${s.usage_count}</b> 次</span>
+            <span>成功率 <b>${Math.round((s.success_rate||1)*100)}%</b></span>
+            ${s.triggers?.length ? '<span>触发: ' + sanitize(s.triggers.slice(0, 3).join(", ")) + '</span>' : ''}
           </div>
         </div>
       `).join("");
     }
     container.innerHTML = html;
+
+    // Update count
+    const countEl = document.getElementById("agent-skills-count");
+    if (countEl) countEl.textContent = `${(list || []).length} 个技能`;
 
     // Wire up curator run
     document.getElementById("curator-run-btn")?.addEventListener("click", async () => {

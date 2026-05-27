@@ -18,9 +18,13 @@ contextBridge.exposeInMainWorld("goodAgent", {
   // Memory Store
   memoryReadUser: () => ipcRenderer.invoke("memory:read-user"),
   memoryWriteUser: (content) => ipcRenderer.invoke("memory:write-user", content),
+  memoryAppendUser: (content) => ipcRenderer.invoke("memory:append-user", content),
   memoryReadProject: () => ipcRenderer.invoke("memory:read-project"),
   memoryWriteProject: (content) => ipcRenderer.invoke("memory:write-project", content),
+  memoryAppendProject: (content) => ipcRenderer.invoke("memory:append-project", content),
   memorySearch: (query) => ipcRenderer.invoke("memory:search", query),
+  editMessage: (messageId, newContent) => ipcRenderer.invoke("session:edit-message", messageId, newContent),
+  exportSessionMarkdown: (id) => ipcRenderer.invoke("session:export-markdown", id),
   // Skills
   skillsListAll: () => ipcRenderer.invoke("skills:list-all"),
   skillsLoadOne: (name) => ipcRenderer.invoke("skills:load-one", name),
@@ -29,8 +33,11 @@ contextBridge.exposeInMainWorld("goodAgent", {
   skillsDetectPatterns: () => ipcRenderer.invoke("skills:detect-patterns"),
   skillsCuratorRun: () => ipcRenderer.invoke("skills:curator-run"),
   skillsCuratorStatus: () => ipcRenderer.invoke("skills:curator-status"),
+  skillsCuratorConfig: (config) => ipcRenderer.invoke("skills:curator-config", config),
   skillsHealth: (name) => ipcRenderer.invoke("skills:health", name),
   skillsSaveSkill: (name, meta, body) => ipcRenderer.invoke("skills:save", name, meta, body),
+  skillsSearch: (query, limit) => ipcRenderer.invoke("skills:search", query, limit),
+  skillsReindex: () => ipcRenderer.invoke("skills:reindex"),
   listSkills: () => ipcRenderer.invoke("skills:list"),
   loadSkill: (name) => ipcRenderer.invoke("skills:load", name),
   onStreamStart: (cb) => ipcRenderer.on("stream:start", () => cb()),
@@ -41,6 +48,8 @@ contextBridge.exposeInMainWorld("goodAgent", {
   onToolStart: (cb) => ipcRenderer.on("tool:start", (_event, d) => cb(d)),
   onToolResult: (cb) => ipcRenderer.on("tool:result", (_event, d) => cb(d)),
   onSessionUpdate: (cb) => ipcRenderer.on("session:update", (_event, d) => cb(d)),
+  onL0Budget: (cb) => ipcRenderer.on("l0:budget", (_event, d) => cb(d)),
+  onTaskClear: (cb) => ipcRenderer.on("task:clear", () => cb()),
   // System prompt profiles
   listPromptProfiles: () => ipcRenderer.invoke("prompt:list"),
   savePromptProfile: (profile) => ipcRenderer.invoke("prompt:save", profile),
@@ -66,4 +75,13 @@ contextBridge.exposeInMainWorld("goodAgent", {
   onWechatBotStatus: (cb) => ipcRenderer.on("wechat:bot-status", (_e, d) => cb(d)),
   onWechatIncoming: (cb) => ipcRenderer.on("wechat:incoming", (_e, d) => cb(d)),
   syncApiToWechat: (cfg) => ipcRenderer.invoke("api:sync-to-wechat", cfg),
+  // AskUserQuestion
+  onAskQuestion: (cb) => ipcRenderer.on("ask:question", (_e, d) => cb(d)),
+  respondQuestion: (id, answers) => ipcRenderer.invoke("ask:respond", { id, answers }),
+  // Memory (multi-file)
+  memoryListAll: () => ipcRenderer.invoke("memory:list-all"),
+  memoryReadOne: (filename) => ipcRenderer.invoke("memory:read-one", filename),
+  memoryCreate: (name, description, type, content) => ipcRenderer.invoke("memory:create", { name, description, type, content }),
+  memoryUpdate: (filename, content, name, description, type) => ipcRenderer.invoke("memory:update", { filename, content, name, description, type }),
+  memoryDelete: (filename) => ipcRenderer.invoke("memory:delete", filename),
 });

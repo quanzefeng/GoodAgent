@@ -209,6 +209,49 @@ class SessionDB {
     return { id, title, updatedAt: now };
   }
 
+  editMessage(messageId, newContent) {
+    this.#ensureOpen();
+    const msg = this.#db.prepare("SELECT session_id, content FROM messages WHERE id = ?").get(messageId);
+    if (!msg) return { error: "not found" };
+
+    // Update messages table
+    this.#db.prepare("UPDATE messages SET content = ? WHERE id = ?").run(newContent, messageId);
+
+    // Update FTS: delete old, insert new
+    if (msg.content) {
+      this.#db.prepare(
+        "DELETE FROM messages_fts WHERE session_id = ? AND content = ?"
+      ).run(msg.session_id, fts5Normalize(msg.content));
+    }
+    if (newContent) {
+      this.#db.prepare(
+        "INSERT INTO messages_fts(session_id, content) VALUES (?, ?)"
+      ).run(msg.session_id, fts5Normalize(newContent));
+    }
+
+    return { updated: true, sessionId: msg.session_id, messageId };
+  }
+
+  exportSession(id) {
+    this.#ensureOpen();
+    const s = this.#db.prepare(
+      "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?"
+    ).get(id);
+    if (!s) return null;
+
+    const msgs = this.#db.prepare(
+      "SELECT role, content, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC"
+    ).all(id);
+
+    const lines = [`# ${s.title}`, ``, `**创建时间:** ${s.created_at}`, `**更新时间:** ${s.updated_at}`, ``];
+    for (const m of msgs) {
+      lines.push(`### ${m.role === "user" ? "用户" : "助手"}`);
+      lines.push(`${m.content || "(空)"}`);
+      lines.push(``);
+    }
+    return { id: s.id, title: s.title, markdown: lines.join("\n") };
+  }
+
   // ── FTS5 Search ──────────────────────────────────────────
 
   searchMessages(query, limit = 30) {
