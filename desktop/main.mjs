@@ -1609,6 +1609,9 @@ Working directory: ${WORKSPACE}`;
   const skillsCtx = skills.buildSkillsContext();
   if (skillsCtx) content += skillsCtx;
 
+  // ── Skill usage instruction ──
+  content += `\n\n**IMPORTANT: Before answering any user request, check both "Enabled skills" and "Available Skills" sections above. If a skill matches the user's request, you MUST call \`skill\` (for installed skills) or \`invoke_skill\` (for agent skills) with that skill name to load its full instructions, then follow them. Do not ignore matching skills.**`;
+
   // ── Pattern detection hints ──
   try {
     const patterns = skills.detectPatterns(sessionDb);

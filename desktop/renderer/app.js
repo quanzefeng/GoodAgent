@@ -3169,30 +3169,25 @@ async function refreshSkillsList() {
     if (!list?.length && !patterns?.length) {
       html += '<div class="skill-card skill-card-empty">' + t("agent_skills.empty") + '</div>';
     } else {
-      html += (list || []).map(s => `
+      html += (list || []).map(s => {
+        const isActive = s.status === "active";
+        return `
         <div class="skill-card">
           <div class="skill-card-header">
             <div class="skill-card-name">
+              <label class="skill-toggle">
+                <input type="checkbox" class="skill-toggle-input" data-skill="${sanitize(s.name)}" ${isActive ? 'checked' : ''} />
+                <span class="skill-toggle-slider"></span>
+              </label>
               <span>${sanitize(s.name)}</span>
-              <span class="skill-status-badge ${s.status}">${s.status === "active" ? t("agent_skills.status_active") : t("agent_skills.status_archived")}</span>
             </div>
             <div class="skill-card-actions">
-              <button class="btn btn-xs skill-edit-btn" data-skill="${sanitize(s.name)}">${t("agent_skills.edit")}</button>
-              <button class="btn btn-xs skill-export-btn" data-skill="${sanitize(s.name)}">${t("agent_skills.export")}</button>
-              ${s.status === "active"
-                ? '<button class="btn btn-xs skill-archive-btn" data-skill="' + s.name + '">' + t("agent_skills.deactivate") + '</button>'
-                : '<button class="btn btn-xs skill-activate-btn" data-skill="' + s.name + '">' + t("agent_skills.activate") + '</button>'}
               <button class="btn btn-xs skill-delete-btn" data-skill="${s.name}" style="color:#ef4444;">${t("agent_skills.delete")}</button>
             </div>
           </div>
           <div class="skill-card-desc">${sanitize(s.description)}</div>
-          <div class="skill-card-meta">
-            <span>${t("agent_skills.usage")} <b>${s.usage_count}</b> ${t("agent_skills.times_suffix")}</span>
-            <span>${t("agent_skills.success_rate")} <b>${Math.round((s.success_rate||1)*100)}%</b></span>
-            ${s.triggers?.length ? '<span>' + t("agent_skills.trigger_prefix") + ' ' + sanitize(s.triggers.slice(0, 3).join(", ")) + '</span>' : ''}
-          </div>
-        </div>
-      `).join("");
+        </div>`;
+      }).join("");
     }
     container.innerHTML = html;
 
@@ -3219,7 +3214,12 @@ async function refreshSkillsList() {
         btn.disabled = true; btn.textContent = t("agent_skills.generating");
         try {
           const cfg = loadApiConfig();
-          const res = await fetch((cfg.apiUrl || "").replace(/\/+$/, "") + "/chat/completions", {
+          let url = (cfg.apiUrl || "").replace(/\/+$/, "");
+          if (!url.includes("/chat/completions")) {
+            if (!url.endsWith("/v1")) url += "/v1";
+            url += "/chat/completions";
+          }
+          const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (cfg.apiKey || "") },
             body: JSON.stringify({
@@ -3253,19 +3253,15 @@ async function refreshSkillsList() {
       });
     });
 
-    // Wire up buttons
-    container.querySelectorAll(".skill-archive-btn").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        await window.goodAgent.skillsSetStatus(btn.dataset.skill, "archived");
+    // Wire up toggle switches
+    container.querySelectorAll(".skill-toggle-input").forEach(toggle => {
+      toggle.addEventListener("change", async () => {
+        const status = toggle.checked ? "active" : "archived";
+        await window.goodAgent.skillsSetStatus(toggle.dataset.skill, status);
         await refreshSkillsList();
       });
     });
-    container.querySelectorAll(".skill-activate-btn").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        await window.goodAgent.skillsSetStatus(btn.dataset.skill, "active");
-        await refreshSkillsList();
-      });
-    });
+    // Wire up delete buttons
     container.querySelectorAll(".skill-delete-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (!confirm(t("agent_skills.delete_confirm", {name: btn.dataset.skill}))) return;

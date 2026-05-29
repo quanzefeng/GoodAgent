@@ -2039,9 +2039,6 @@ html, body {
 }
 
 #panel-agent-skills .skill-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   padding: 12px;
   background: var(--bg-secondary, rgba(255,255,255,0.04));
   border: 1px solid var(--border-color, rgba(255,255,255,0.08));
@@ -2053,43 +2050,43 @@ html, body {
   border-color: var(--accent-muted, rgba(145,120,220,0.3));
 }
 
-#panel-agent-skills .skill-card-info {
-  flex: 1;
-  min-width: 0;
+#panel-agent-skills .skill-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 #panel-agent-skills .skill-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
   font-size: 0.95rem;
   color: var(--text-primary, #e8e8e8);
-  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+#panel-agent-skills .skill-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 #panel-agent-skills .skill-card-desc {
   font-size: 0.85rem;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-top: 6px;
   line-height: 1.4;
-}
-
-#panel-agent-skills .skill-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-#panel-agent-skills .skill-card-meta span {
-  opacity: 0.7;
-}
-
-#panel-agent-skills .skill-card-source {
-  font-weight: 500;
-}
-
-#panel-agent-skills .skill-card-version {
-  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 #panel-agent-skills .skill-card-triggers {
@@ -2585,9 +2582,6 @@ html, body {
 .context-usage.danger { color: #ef4444; background: rgba(239,68,68,0.12); }
 
 /* ── Skill Card Actions ── */
-#panel-agent-skills .skill-card { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-#panel-agent-skills .skill-card-info { flex:1; min-width:0; }
-#panel-agent-skills .skill-card-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 #panel-agent-skills .btn-sm { font-size:11px; padding:2px 8px; border-radius:4px; border:1px solid var(--border-color,#333); background:var(--bg-primary,#1a1a2e); color:var(--text-secondary,#aaa); cursor:pointer; white-space:nowrap; }
 #panel-agent-skills .btn-sm:hover { background:var(--hover-bg,#2a2a3e); color:var(--text-primary,#eee); }
 
