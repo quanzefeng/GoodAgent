@@ -4,6 +4,7 @@ import './modules/workspace.mjs';
 import { initKnowledgeBase } from './modules/knowledge-base.mjs';
 import { initMemoryPanel } from './modules/memory-panel.mjs';
 import { loadAgentName, loadUserName, applyAgentName, applyUserName, initAgentNameUI, initUserAvatarUI, loadUserAvatarSrc } from './modules/agent-name.mjs';
+import { sanitize, renderMarkdown, renderLatexInElement, autoResize, formatFileSize, scrollToBottom, setStatus, loadReasoningEnabled, saveReasoningEnabled } from './modules/helpers.mjs';
 
 /* ── Configure marked.js ──────────────────────────────── */
 marked.setOptions({
@@ -101,71 +102,10 @@ const USER_AVATAR_KEY = "goodagent_user_avatar";
 const FONT_KEY = "goodagent_font";
 const USER_NAME_KEY = "goodagent_user_name";
 
-/* ── Helpers ──────────────────────────────────────────── */
-function sanitize(html) {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: [
-      "p", "br", "b", "i", "em", "strong", "a", "ul", "ol", "li",
-      "h1", "h2", "h3", "h4", "h5", "h6",
-      "code", "pre", "blockquote", "hr", "table", "thead", "tbody",
-      "tr", "th", "td", "span", "div", "img", "hr", "del", "input",
-    ],
-    ALLOWED_ATTR: ["href", "target", "class", "id", "src", "alt", "type", "checked", "disabled", "data-m"],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.-]|$))/i,
-  });
-}
-
-function renderMarkdown(text) {
-  // Replace LaTeX delimiters with HTML marker spans that survive marked + DOMPurify
-  // Order matters: $$ must come before $, and \( / \[ before their closing pairs
-  text = text.replace(/\$\$([\s\S]+?)\$\$/g, '<span class="kp" data-m="d">$1</span>');
-  text = text.replace(/\\\(/g, '<span class="kp" data-m="i">');
-  text = text.replace(/\\\)/g, '</span>');
-  text = text.replace(/\\\[/g, '<span class="kp" data-m="d">');
-  text = text.replace(/\\\]/g, '</span>');
-  // Inline $…$ — only replace if content looks like math, not currency
-  text = text.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (m, inner) => {
-    const t = inner.trim();
-    if (/^\d+[.,]?\d*%?$/.test(t)) return m;        // skip currency / plain numbers
-    if (/[\\{}_^]/.test(t)) return `<span class="kp" data-m="i">${t}</span>`;
-    if (/[a-zA-Z]/.test(t) && /[=+\-*/^()\[\]<>]/.test(t)) return `<span class="kp" data-m="i">${t}</span>`;
-    return m;
-  });
-  let html = marked.parse(text);
-  html = sanitize(html);
-  return html;
-}
-
-function renderLatexInElement(el) {
-  if (typeof katex !== "undefined" && typeof katex.render === "function") {
-    el.querySelectorAll("span.kp").forEach((span) => {
-      const tex = span.textContent;
-      const displayMode = span.dataset.m === "d";
-      try {
-        katex.render(tex, span, { displayMode, throwOnError: true });
-      } catch (_e) {
-        // KaTeX 渲染失败（如流式输出不完整公式）→ 回退显示原始 LaTeX 源码
-        span.outerHTML = displayMode
-          ? `<div class="katex-raw">\\[${tex.replace(/</g, "&lt;")}\\]</div>`
-          : `<span class="katex-raw">\\(${tex.replace(/</g, "&lt;")}\\)</span>`;
-      }
-    });
-  }
-}
-
-function autoResize(textarea) {
-  textarea.style.height = "auto";
-  textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
-}
+/* ── Helpers (imported from modules/helpers.mjs) ── */
 
 /* ── File upload ──────────────────────────────── */
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
 
 function fileIconSvg(type, name) {
   // Images show a thumbnail
@@ -253,19 +193,6 @@ fileInput.addEventListener("change", () => {
   fileInput.value = ""; // allow re-selecting same files
 });
 
-function setStatus(text) {
-  if (statusText) statusText.textContent = text;
-}
-
-/* ── Reasoning toggle ────────────────────────────── */
-function loadReasoningEnabled() {
-  const val = localStorage.getItem(STORAGE_KEYS.REASONING_ENABLED);
-  return val !== null ? val === "true" : true; // default true
-}
-
-function saveReasoningEnabled(enabled) {
-  localStorage.setItem(STORAGE_KEYS.REASONING_ENABLED, enabled);
-}
 
 /* ── Update info bar (model name + reasoning state) ── */
 function updateInfoBar() {
@@ -290,10 +217,6 @@ if (reasoningCheckbox) {
   });
   // Load initial plan mode state
   window.goodAgent.getPlanMode().then(r => { planModeCheckbox.checked = r.planMode; }).catch(() => {});
-}
-
-function scrollToBottom() {
-  messageList.scrollTop = messageList.scrollHeight;
 }
 
 /* ── Message DOM ──────────────────────────────────────── */
