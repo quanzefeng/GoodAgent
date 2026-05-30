@@ -55,6 +55,8 @@ const state = {
   _afterToolCall: false,  // true after a tool call completes, triggers new reasoning block
   _reasoningBlockText: "", // text of the current reasoning block
   attachedFiles: [],       // {name, size, type, dataUrl}
+  _streamStartTime: 0,
+  _streamCharCount: 0,
 };
 
 /* ── DOM refs ─────────────────────────────────────────── */
@@ -445,6 +447,28 @@ function finishAssistantMessage(msgEl) {
         btn.disabled = false;
       }
     });
+  }
+
+  // Show token speed indicator
+  if (!msgEl.querySelector(".token-speed") && state._streamStartTime > 0) {
+    const elapsed = (Date.now() - state._streamStartTime) / 1000;
+    const chars = state._streamCharCount;
+    if (elapsed > 0.5 && chars > 0) {
+      const cps = (chars / elapsed).toFixed(0);
+      // Estimate tokens: ~4 chars per token for English, ~1.5 for CJK
+      const cjkCount = (state.currentText.match(/[一-鿿]/g) || []).length;
+      const asciiCount = chars - cjkCount;
+      const tokens = Math.ceil(cjkCount * 0.7 + asciiCount * 0.25);
+      const tps = (tokens / elapsed).toFixed(1);
+      const speedEl = document.createElement("div");
+      speedEl.className = "token-speed";
+      speedEl.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;";
+      speedEl.textContent = `⚡ ${tps} tok/s · ${elapsed.toFixed(1)}s`;
+      speedEl.title = `${chars} 字符 · ${tokens} tokens · ${elapsed.toFixed(1)}s`;
+      const actions = msgEl.querySelector(".message-actions");
+      if (actions) actions.before(speedEl);
+      else msgEl.querySelector(".message-content")?.after(speedEl);
+    }
   }
 
   scrollToBottom();
@@ -1230,6 +1254,8 @@ function setupIPC() {
     state.currentText = "";
     state.currentReasoning = "";
     state._thinkBuffer = "";
+    state._streamStartTime = Date.now();
+    state._streamCharCount = 0;
   });
 
   onIpc("onStreamChunk", (data) => {
@@ -1241,6 +1267,7 @@ function setupIPC() {
 
     if (data.text) {
       state.currentText += data.text;
+      state._streamCharCount += data.text.length;
 
       // Batch render: update at most every ~50ms
       if (!state._renderTimer) {
