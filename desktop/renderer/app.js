@@ -512,39 +512,25 @@ function updateConfigBanner() {
 }
 
 function getCurrentModelValue() {
-  if (settingsModelInput && settingsModelInput.style.display !== "none") {
-    return settingsModelInput.value;
-  }
-  return settingsModel?.value || "";
+  if (settingsModelInput) return settingsModelInput.value;
+  return "";
 }
 
 function populateModelDropdown(preset, selectedModel) {
-  if (!settingsModel) return;
-  if (preset && preset.models && preset.models.length > 0) {
-    // Has preset models — show <select>, hide <input>
-    settingsModel.style.display = "";
-    if (settingsModelInput) settingsModelInput.style.display = "none";
-    settingsModel.innerHTML = "";
-    preset.models.forEach(m => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.label;
-      if (m.id === selectedModel) opt.selected = true;
-      settingsModel.appendChild(opt);
-    });
-    if (selectedModel && !preset.models.some(m => m.id === selectedModel)) {
-      const customOpt = document.createElement("option");
-      customOpt.value = selectedModel;
-      customOpt.textContent = selectedModel + t("misc.custom_suffix");
-      customOpt.selected = true;
-      settingsModel.insertBefore(customOpt, settingsModel.firstChild);
-    }
-  } else {
-    // No preset models — show <input> for manual entry, hide <select>
-    settingsModel.style.display = "none";
-    if (settingsModelInput) {
-      settingsModelInput.style.display = "";
-      settingsModelInput.value = selectedModel || "";
+  if (!settingsModelInput) return;
+  // Always show the input
+  settingsModelInput.value = selectedModel || "";
+  // Populate datalist with preset models
+  const datalist = document.getElementById("model-suggestions");
+  if (datalist) {
+    datalist.innerHTML = "";
+    if (preset && preset.models && preset.models.length > 0) {
+      preset.models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.textContent = m.label;
+        datalist.appendChild(opt);
+      });
     }
   }
 }
@@ -556,10 +542,8 @@ function fillSettingsForm() {
     if (settingsProvider) settingsProvider.value = cfg.provider;
     const preset = PROVIDER_PRESETS[cfg.provider];
     if (settingsUrl) settingsUrl.value = cfg.apiUrl || (preset?.url ?? "");
-    if (settingsModel) {
-      const selectedModel = cfg.model || preset?.model || "";
-      populateModelDropdown(preset, selectedModel);
-    }
+    const selectedModel = cfg.model || preset?.model || "";
+    populateModelDropdown(preset, selectedModel);
     if (settingsKey) settingsKey.value = cfg.apiKey;
   } finally {
     _fillingForm = false;
