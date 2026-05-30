@@ -512,44 +512,22 @@ function updateConfigBanner() {
 }
 
 function getCurrentModelValue() {
-  // Input takes priority (user might type custom model)
-  if (settingsModelInput && settingsModelInput.style.display !== "none" && settingsModelInput.value.trim()) {
-    return settingsModelInput.value.trim();
-  }
-  return settingsModel?.value || "";
+  if (settingsModelInput) return settingsModelInput.value;
+  return "";
 }
 
 function populateModelDropdown(preset, selectedModel) {
-  if (settingsModel && preset && preset.models && preset.models.length > 0) {
-    // Has preset models — show both <select> and <input>
-    settingsModel.style.display = "";
-    settingsModel.innerHTML = "";
-    preset.models.forEach(m => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.label;
-      if (m.id === selectedModel) opt.selected = true;
-      settingsModel.appendChild(opt);
-    });
-    if (selectedModel && !preset.models.some(m => m.id === selectedModel)) {
-      const customOpt = document.createElement("option");
-      customOpt.value = selectedModel;
-      customOpt.textContent = selectedModel + t("misc.custom_suffix");
-      customOpt.selected = true;
-      settingsModel.insertBefore(customOpt, settingsModel.firstChild);
-    }
-    // Also show input for manual entry
-    if (settingsModelInput) {
-      settingsModelInput.style.display = "";
-      settingsModelInput.value = "";
-      settingsModelInput.placeholder = t("api.model_placeholder");
-    }
-  } else {
-    // No preset models — show only <input>
-    if (settingsModel) settingsModel.style.display = "none";
-    if (settingsModelInput) {
-      settingsModelInput.style.display = "";
-      settingsModelInput.value = selectedModel || "";
+  if (!settingsModelInput) return;
+  settingsModelInput.value = selectedModel || "";
+  const datalist = document.getElementById("model-suggestions");
+  if (datalist) {
+    datalist.innerHTML = "";
+    if (preset && preset.models && preset.models.length > 0) {
+      preset.models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        datalist.appendChild(opt);
+      });
     }
   }
 }
@@ -561,10 +539,8 @@ function fillSettingsForm() {
     if (settingsProvider) settingsProvider.value = cfg.provider;
     const preset = PROVIDER_PRESETS[cfg.provider];
     if (settingsUrl) settingsUrl.value = cfg.apiUrl || (preset?.url ?? "");
-    if (settingsModel || settingsModelInput) {
-      const selectedModel = cfg.model || preset?.model || "";
-      populateModelDropdown(preset, selectedModel);
-    }
+    const selectedModel = cfg.model || preset?.model || "";
+    populateModelDropdown(preset, selectedModel);
     if (settingsKey) settingsKey.value = cfg.apiKey;
   } finally {
     _fillingForm = false;
@@ -706,21 +682,20 @@ async function fetchModels() {
   }
 
   if (models.length > 0) {
-    // Populate the model dropdown with fetched models
-    if (settingsModel) {
-      settingsModel.style.display = "";
-      settingsModel.innerHTML = "";
+    // Populate datalist with fetched models
+    const datalist = document.getElementById("model-suggestions");
+    if (datalist) {
+      datalist.innerHTML = "";
       models.forEach(m => {
         const opt = document.createElement("option");
         opt.value = m.id;
-        opt.textContent = m.label;
-        settingsModel.appendChild(opt);
+        datalist.appendChild(opt);
       });
-      if (settingsModel.value === "" && models.length > 0) {
-        settingsModel.value = models[0].id;
-      }
     }
-    if (settingsModelInput) settingsModelInput.style.display = "none";
+    // Auto-fill if empty
+    if (settingsModelInput && !settingsModelInput.value) {
+      settingsModelInput.value = models[0].id;
+    }
     if (settingsStatus) {
       settingsStatus.textContent = t("api.fetch_success", { count: models.length });
       settingsStatus.className = "settings-status success";
