@@ -1,3 +1,7 @@
+/* ── Import modules ───────────────────────────────────── */
+import './modules/font-settings.mjs';
+import './modules/workspace.mjs';
+
 /* ── Configure marked.js ──────────────────────────────── */
 marked.setOptions({
   breaks: true,
@@ -883,7 +887,8 @@ async function submitQuery() {
     const reasoning = loadReasoningEnabled();
     const agentName = loadAgentName();
     const kbEnabled = document.getElementById("kb-toggle")?.checked || false;
-    await window.goodAgent.submitQuery(text, cfg.apiKey, cfg.apiUrl, cfg.model, cfg.apiFormat, apiFiles, enabledSkills, reasoning, agentName, kbEnabled, planModeCheckbox.checked);
+    const webSearchEnabled = document.getElementById("web-search-toggle")?.checked ?? true;
+    await window.goodAgent.submitQuery(text, cfg.apiKey, cfg.apiUrl, cfg.model, cfg.apiFormat, apiFiles, enabledSkills, reasoning, agentName, kbEnabled, planModeCheckbox.checked, webSearchEnabled);
   } catch (err) {
     console.error("Query error:", err);
   }
@@ -1804,31 +1809,7 @@ if (resetUserAvatarBtn) {
   resetUserAvatarBtn.addEventListener("click", resetUserAvatar);
 }
 
-/* ── Font Settings ──────────────────────────────────── */
-function applyChatFont(fontValue) {
-  document.documentElement.style.setProperty("--chat-font", fontValue);
-}
-
-function loadChatFont() {
-  return localStorage.getItem(FONT_KEY) || "'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif";
-}
-
-const fontSelect = document.getElementById("font-select");
-if (fontSelect) {
-  // Set current value
-  fontSelect.value = loadChatFont();
-  // Apply on change
-  fontSelect.addEventListener("change", () => {
-    const val = fontSelect.value;
-    localStorage.setItem(FONT_KEY, val);
-    applyChatFont(val);
-  });
-  // Render each option in its own font
-  Array.from(fontSelect.options).forEach(opt => {
-    opt.style.fontFamily = opt.value;
-  });
-}
-applyChatFont(loadChatFont());
+/* ── Font Settings (imported from modules/font-settings.mjs) ── */
 
 /* ── Skills ──────────────────────────────────────────── */
 const SKILLS_KEY = "goodagent_enabled_skills";
@@ -3276,26 +3257,7 @@ document.querySelector('.settings-tab[data-tab="agent-skills"]')?.addEventListen
 
 initWechatStatus();
 
-/* ── Workspace ────────────────────────────────────────── */
-async function initWorkspace() {
-  try {
-    const ws = await window.goodAgent.workspaceGet();
-    const el = document.getElementById("workspace-path");
-    if (el) el.textContent = ws || t("misc.not_set");
-  } catch {}
-}
-
-document.getElementById("workspace-bar")?.addEventListener("click", async () => {
-  try {
-    const result = await window.goodAgent.workspacePick();
-    if (result?.ok && result.workspace) {
-      const el = document.getElementById("workspace-path");
-      if (el) el.textContent = result.workspace;
-    }
-  } catch {}
-});
-
-initWorkspace();
+/* ── Workspace (imported from modules/workspace.mjs) ── */
 
 /* ── Knowledge Base Panel ──────────────────────────────── */
 let _kbPanelLoaded = false;
@@ -3448,6 +3410,16 @@ if (_kbToggle) {
   _kbToggle.checked = localStorage.getItem("goodagent_kb_enabled") === "true";
   _kbToggle.addEventListener("change", () => {
     localStorage.setItem("goodagent_kb_enabled", _kbToggle.checked);
+  });
+}
+
+// Web search toggle init
+const _webSearchToggle = document.getElementById("web-search-toggle");
+if (_webSearchToggle) {
+  const saved = localStorage.getItem("goodagent_web_search_enabled");
+  _webSearchToggle.checked = saved === null ? true : saved === "true";
+  _webSearchToggle.addEventListener("change", () => {
+    localStorage.setItem("goodagent_web_search_enabled", _webSearchToggle.checked);
   });
 }
 
