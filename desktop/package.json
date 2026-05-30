@@ -1,6 +1,6 @@
 {
   "name": "goodagent-desktop",
-  "version": "2.1.88",
+  "version": "1.0.1",
   "description": "GoodAgent Desktop — Electron GUI wrapper",
   "type": "module",
   "main": "main.mjs",
