@@ -61,7 +61,7 @@
   /* ── 文字（从深到亮） ── */
   --text:         #1a1a2e;  /* 正文深色 */
   --text-light:   #555570;  /* 次要文本 */
-  --text-muted:   #999aab;  /* 辅助/禁用 */
+  --text-muted:   #7e7e94;  /* 辅助/禁用 */
 
   /* ── 强调色（琥珀） ── */
   --accent:       #6366f1;
@@ -1372,11 +1372,11 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
+  color: var(--text);
   margin-bottom: 4px;
 }
 .msg-avatar {
@@ -1546,7 +1546,27 @@ html, body {
 }
 
 .tool-entry-icon {
-  font-size: 11px;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #3b82f6);
+  border-top-color: transparent;
+  flex-shrink: 0;
+}
+.tool-entry-icon.spinning {
+  animation: spin-tool 0.8s linear infinite;
+}
+.tool-entry-icon.done {
+  border: none;
+  background: var(--success, #22c55e);
+}
+.tool-entry-icon.error {
+  border: none;
+  background: var(--danger, #ef4444);
+}
+@keyframes spin-tool {
+  to { transform: rotate(360deg); }
 }
 
 .tool-entry-name {

@@ -1220,7 +1220,7 @@ function addToolCall(name, args) {
     .join("");
   entry.innerHTML = `
     <div class="tool-entry-head">
-      <span class="tool-entry-icon">🛠</span>
+      <span class="tool-entry-icon spinning"></span>
       <span class="tool-entry-name">${sanitize(name.toLowerCase())}</span>
       <span class="tool-entry-status">${t("mcp.running")}</span>
     </div>
@@ -1235,7 +1235,12 @@ function addToolCall(name, args) {
 function completeToolCall(name, result) {
   const el = document.getElementById(`tool-${state._toolCallCount}`);
   if (!el) return;
-  const statusIcon = result?.error ? "❌" : "✅";
+  const icon = el.querySelector(".tool-entry-icon");
+  if (icon) {
+    icon.classList.remove("spinning");
+    icon.classList.add(result?.error ? "error" : "done");
+  }
+  const statusIcon = result?.error ? "❌" : "";
   el.querySelector(".tool-entry-status").textContent = `${statusIcon} ${t("thinking.done")}`;
   if (result?.error) {
     el.querySelector(".tool-entry-result").innerHTML = `<span style="color:var(--danger);">${sanitize(String(result.error).slice(0, 200))}</span>`;
