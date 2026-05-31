@@ -75,12 +75,14 @@ export function registerIpcHandlers() {
     return await sessionDb.listSessions();
   });
 
-  ipcMain.handle("session:load", async (_event, id) => {
+  ipcMain.handle("session:load", async (_event, id, opts) => {
     const data = await sessionDb.loadSession(id);
     if (data) {
-      setSessionId(data.id);
-      setHistory(data.history || []);
-      sendToRenderer("session:update", { sessionId: data.id });
+      if (!opts?.readOnly) {
+        setSessionId(data.id);
+        setHistory(data.history || []);
+        sendToRenderer("session:update", { sessionId: data.id });
+      }
       return { sessionId: data.id, title: data.title, history: data.history || [] };
     }
     return null;

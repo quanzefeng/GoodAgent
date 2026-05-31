@@ -203,10 +203,16 @@ Working directory: ${WORKSPACE}`;
         memorySections.push(`\n\n<memory-context>\n**以下是你的记忆——你过去与用户的对话中与此问题相关的部分：**\n${lines}\n</memory-context>`);
       }
     }
-    const last = sessionDb.getLastSession(4, sessionId);
-    if (last?.messages?.length) {
-      const lines = last.messages.map(m => `- ${m.role}: ${(m.content || "").slice(0, 200)}`).join("\n");
-      memorySections.push(`\n\n<memory-context>\n**上一段对话的延续——你的记忆：** [${last.title}]\n${lines}\n</memory-context>`);
+    const recentSessions = sessionDb.getRecentSessions(10, 4, sessionId);
+    if (recentSessions?.length) {
+      const sessionContexts = recentSessions.map(s => {
+        if (!s.messages?.length) return null;
+        const lines = s.messages.map(m => `- ${m.role}: ${(m.content || "").slice(0, 200)}`).join("\n");
+        return `**[${s.title}]**\n${lines}`;
+      }).filter(Boolean).join("\n\n");
+      if (sessionContexts) {
+        memorySections.push(`\n\n<memory-context>\n**最近对话的记忆：**\n${sessionContexts}\n</memory-context>`);
+      }
     }
     try {
       const HOME = os.homedir();

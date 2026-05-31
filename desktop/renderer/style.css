@@ -1235,6 +1235,22 @@ html, body {
   line-height: 1.4;
 }
 
+.streaming-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #4ade80);
+  margin-right: 4px;
+  vertical-align: middle;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 .session-delete {
   flex-shrink: 0;
   width: 20px;

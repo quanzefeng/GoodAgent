@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld("goodAgent", {
   abortQuery: () => ipcRenderer.invoke("query:abort"),
   resetSession: () => ipcRenderer.invoke("session:reset"),
   listSessions: () => ipcRenderer.invoke("session:list"),
-  loadSession: (id) => ipcRenderer.invoke("session:load", id),
+  loadSession: (id, opts) => ipcRenderer.invoke("session:load", id, opts),
   deleteSession: (id) => ipcRenderer.invoke("session:delete", id),
   deleteAllSessions: () => ipcRenderer.invoke("session:delete-all"),
   deleteMessage: (messageId) => ipcRenderer.invoke("session:delete-message", messageId),

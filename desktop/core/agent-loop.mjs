@@ -32,7 +32,12 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
   const { signal } = abortCtrl;
 
   let sessionId = getSessionId();
-  if (!sessionId) { sessionId = genId(); setSessionId(sessionId); sendToRenderer("session:update", { sessionId }); }
+  if (!sessionId) { sessionId = genId(); setSessionId(sessionId); }
+  // Save placeholder session to DB immediately so it appears in sidebar
+  const placeholderTitle = (prompt || "").replace(/[\r\n]+/g, " ").trim().slice(0, 60) || "新对话";
+  const placeholderHistory = [{ role: "user", content: prompt || "" }];
+  await sessionDb.saveSession(sessionId, placeholderHistory, placeholderTitle);
+  sendToRenderer("session:update", { sessionId });
 
   // ── Build user message with optional file attachments ──
   let userMessage;

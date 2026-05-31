@@ -12,11 +12,21 @@ export function sanitize(html) {
 }
 
 export function renderMarkdown(text) {
+  // 1. $$...$$ → display math
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, '<span class="kp" data-m="d">$1</span>');
-  text = text.replace(/\\\(/g, '<span class="kp" data-m="i">');
-  text = text.replace(/\\\)/g, '</span>');
-  text = text.replace(/\\\[/g, '<span class="kp" data-m="d">');
-  text = text.replace(/\\\]/g, '</span>');
+  // 2. \[...\] → display math (greedy to capture multiline)
+  text = text.replace(/\\\[([\s\S]+?)\\\]/g, '<span class="kp" data-m="d">$1</span>');
+  // 3. \(...\) → inline math
+  text = text.replace(/\\\(([\s\S]+?)\\\)/g, '<span class="kp" data-m="i">$1</span>');
+  // 4. \begin{env}...\end{env} → display math (cases, aligned, gather, etc.)
+  text = text.replace(/\\begin\{([^}]+)\}([\s\S]+?)\\end\{\1\}/g, (m, env, body) => {
+    return `<span class="kp" data-m="d">\\begin{${env}}${body}\\end{${env}}</span>`;
+  });
+  // 5. Dangling \[ without \] (streaming edge case) — wrap rest of line
+  text = text.replace(/\\\[(?![\s\S]*\\\])([^\n]*)/g, '<span class="kp" data-m="d">$1</span>');
+  // 6. Dangling \( without \) (streaming edge case) — wrap rest of line
+  text = text.replace(/\\\((?![\s\S]*\\\))([^\n]*)/g, '<span class="kp" data-m="i">$1</span>');
+  // 7. $...$ → inline math (with content detection)
   text = text.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (m, inner) => {
     const t = inner.trim();
     if (/^\d+[.,]?\d*%?$/.test(t)) return m;

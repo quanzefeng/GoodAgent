@@ -373,6 +373,25 @@ class SessionDB {
     };
   }
 
+  getRecentSessions(count = 10, msgsPerSession = 4, excludeId = "") {
+    this.#ensureOpen();
+    const sql = excludeId
+      ? "SELECT id, title FROM sessions WHERE id != ? ORDER BY updated_at DESC LIMIT ?"
+      : "SELECT id, title FROM sessions ORDER BY updated_at DESC LIMIT ?";
+    const params = excludeId ? [excludeId, count] : [count];
+    const sessions = this.#db.prepare(sql).all(...params);
+    return sessions.map(s => {
+      const msgs = this.#db.prepare(
+        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?"
+      ).all(s.id, msgsPerSession);
+      return {
+        id: s.id,
+        title: s.title,
+        messages: msgs.map(m => ({ role: m.role, content: m.content })),
+      };
+    });
+  }
+
   getStatus() {
     this.#ensureOpen();
     return {

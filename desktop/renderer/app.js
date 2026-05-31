@@ -782,10 +782,24 @@ async function fetchModels() {
 }
 
 /* ── Query ────────────────────────────────────────────── */
+// ── Message queue for multi-conversation ──────────────────
+const _queryQueue = [];
+
 async function submitQuery() {
   const text = promptInput.value.trim();
   const files = state.attachedFiles;
-  if ((!text && files.length === 0) || state.isStreaming) return;
+  if ((!text && files.length === 0)) return;
+  if (state.isStreaming) {
+    // Queue the message for later
+    _queryQueue.push({ text, files: [...files] });
+    promptInput.value = "";
+    autoResize(promptInput);
+    state.attachedFiles = [];
+    renderFilePreviews();
+    updateSendButton();
+    setStatus(t("status.queued") || "已排队，等待当前对话完成...");
+    return;
+  }
 
   const cfg = loadApiConfig();
   if (!cfg.apiUrl) {
@@ -885,11 +899,40 @@ function stopQuery() {
   setStatus(t("status.ready"));
 }
 
+function processQueryQueue() {
+  if (_queryQueue.length === 0) return;
+  const next = _queryQueue.shift();
+  // Restore queued files to state
+  state.attachedFiles = next.files || [];
+  // Set prompt and submit
+  promptInput.value = next.text;
+  submitQuery();
+}
+
 function resetChat() {
   if (state.isStreaming) {
-    window.goodAgent.abortQuery();
+    // Don't abort — hold streaming DOM, show welcome
+    holdStreamingDom();
+    // Reset backend session so next query starts fresh
+    window.goodAgent.resetSession();
+    _loadedSessionId = null;
+    state.currentAssistantMsg = null;
+    _queryQueue.length = 0;
+    showWelcome();
+    state.attachedFiles = [];
+    _taskCache.clear();
+    _todoCache.length = 0;
+    updateTaskIndicator(null, null, null, []);
+    if (sessionDisplay) sessionDisplay.textContent = "—";
+    renderFilePreviews();
+    updateSendButton();
+    promptInput.value = "";
+    setStatus(t("status.ready"));
+    refreshSessionList();
+    return;
   }
   window.goodAgent.resetSession();
+  _queryQueue.length = 0;
   state.sessionId = null;
   state.isStreaming = false;
   state.currentText = "";
@@ -901,7 +944,6 @@ function resetChat() {
   state._reasoningBlockText = "";
   state.attachedFiles = [];
   _loadedSessionId = null;
-  // Clear task/todo state
   _taskCache.clear();
   _todoCache.length = 0;
   updateTaskIndicator(null, null, null, []);
@@ -919,6 +961,36 @@ function resetChat() {
 /* ── Session List ──────────────────────────────────────────── */
 let _loadedSessionId = null;
 
+// ── Holding container for streaming DOM when switching sessions ────
+let _streamingHolder = document.createElement("div");
+_streamingHolder.style.display = "none";
+document.body.appendChild(_streamingHolder);
+
+function holdStreamingDom() {
+  if (!state.currentAssistantMsg) return;
+  while (messageList.firstChild) {
+    _streamingHolder.appendChild(messageList.firstChild);
+  }
+}
+
+function restoreHeldDom() {
+  if (!_streamingHolder.firstChild) return false;
+  messageList.innerHTML = "";
+  while (_streamingHolder.firstChild) {
+    messageList.appendChild(_streamingHolder.firstChild);
+  }
+  // Rebind state to restored DOM
+  const msgs = messageList.querySelectorAll(".message");
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].classList.contains("assistant")) {
+      state.currentAssistantMsg = msgs[i];
+      break;
+    }
+  }
+  state._toolCallCount = messageList.querySelectorAll(".tool-entry").length;
+  return true;
+}
+
 function refreshSessionList() {
   window.goodAgent.listSessions().then(sessions => {
     const container = document.getElementById("session-list");
@@ -927,15 +999,20 @@ function refreshSessionList() {
       container.innerHTML = '<div class="session-list-empty">' + t("sidebar.empty") + '</div>';
       return;
     }
-    container.innerHTML = sessions.map(s => `
-      <div class="session-item ${_loadedSessionId === s.id ? "active" : ""}" data-session-id="${s.id}">
-        <div class="session-item-title" title="${sanitize(s.title || t("sidebar.no_title"))}">${sanitize((s.title || t("sidebar.no_title")).slice(0, 28))}</div>
+    container.innerHTML = sessions.map(s => {
+      const isStreaming = state.isStreaming && state.sessionId === s.id;
+      const isActive = _loadedSessionId === s.id || isStreaming;
+      const streamDot = isStreaming ? '<span class="streaming-dot"></span>' : '';
+      return `
+      <div class="session-item ${isActive ? "active" : ""}" data-session-id="${s.id}">
+        <div class="session-item-title" title="${sanitize(s.title || t("sidebar.no_title"))}">${streamDot}${sanitize((s.title || t("sidebar.no_title")).slice(0, 28))}</div>
         <div class="session-item-actions">
           <button class="session-export" data-session-id="${s.id}" title="${t("sidebar.export")}">↓</button>
           <button class="session-delete" data-session-id="${s.id}" title="${t("sidebar.delete")}">×</button>
         </div>
       </div>
-    `).join("");
+      `;
+    }).join("");
   }).catch(() => {});
 }
 
@@ -960,9 +1037,31 @@ document.getElementById("session-search-input")?.addEventListener("input", funct
 });
 
 function loadChat(sessionId) {
-  if (state.isStreaming) {
-    window.goodAgent.abortQuery();
+  // If clicking on the same streaming session, just restore held DOM
+  if (state.isStreaming && sessionId === state.sessionId) {
+    restoreHeldDom();
+    _loadedSessionId = sessionId;
+    if (sessionDisplay) sessionDisplay.textContent = sessionId || "—";
+    refreshSessionList();
+    scrollToBottom();
+    return;
   }
+
+  // If streaming, hold current DOM before loading a different session
+  if (state.isStreaming) {
+    holdStreamingDom();
+    // Load with readOnly to avoid overwriting backend state
+    window.goodAgent.loadSession(sessionId, { readOnly: true }).then(data => {
+      if (!data) return;
+      _loadedSessionId = data.sessionId;
+      if (sessionDisplay) sessionDisplay.textContent = data.title || data.sessionId || "—";
+      rebuildMessages(data);
+      refreshSessionList();
+      scrollToBottom();
+    }).catch(e => console.error("[loadChat] loadSession error:", e));
+    return;
+  }
+
   window.goodAgent.loadSession(sessionId).then(data => {
     if (!data) return;
     _loadedSessionId = data.sessionId;
@@ -980,32 +1079,34 @@ function loadChat(sessionId) {
     promptInput.value = "";
     setStatus(t("status.ready"));
 
-    // Rebuild message list from history
-    messageList.innerHTML = "";
-    const hist = data.history || [];
-    for (const m of hist) {
-      if (m.role === "user") {
-        const el = addUserMessage(m.content);
-        if (m.id) el.dataset.msgId = m.id;
-      } else if (m.role === "assistant") {
-        const el = addAssistantMessage();
-        if (m.id) el.dataset.msgId = m.id;
-        state.currentAssistantMsg = el;
-        requestAnimationFrame(() => {
-          // Restore reasoning_content from history
-          if (m.reasoning_content) {
-            state.currentReasoning = m.reasoning_content;
-            updateThinkingSection(el, m.reasoning_content);
-          }
-          updateAssistantContent(el, m.content || "");
-          finishAssistantMessage(el);
-        });
-      }
-    }
-    state.currentAssistantMsg = null;
-    sessionDisplay.textContent = data.sessionId || "—";
+    rebuildMessages(data);
+    if (sessionDisplay) sessionDisplay.textContent = data.sessionId || "—";
     refreshSessionList();
   }).catch(() => {});
+}
+
+function rebuildMessages(data) {
+  messageList.innerHTML = "";
+  const hist = data.history || [];
+  for (const m of hist) {
+    if (m.role === "user") {
+      const el = addUserMessage(m.content);
+      if (m.id) el.dataset.msgId = m.id;
+    } else if (m.role === "assistant") {
+      const el = addAssistantMessage();
+      if (m.id) el.dataset.msgId = m.id;
+      state.currentAssistantMsg = el;
+      requestAnimationFrame(() => {
+        if (m.reasoning_content) {
+          state.currentReasoning = m.reasoning_content;
+          updateThinkingSection(el, m.reasoning_content);
+        }
+        updateAssistantContent(el, m.content || "");
+        finishAssistantMessage(el);
+      });
+    }
+  }
+  state.currentAssistantMsg = null;
 }
 
 // Delegate click events on session-list (handles load, delete, export)
@@ -1346,6 +1447,9 @@ function setupIPC() {
       finishAssistantMessage(state.currentAssistantMsg);
     }
     stopQuery();
+    refreshSessionList();
+    // Process queued queries
+    processQueryQueue();
   });
 
   onIpc("onStreamError", (data) => {
@@ -1353,6 +1457,7 @@ function setupIPC() {
       finishAssistantMessage(state.currentAssistantMsg);
     }
     stopQuery();
+    refreshSessionList();
     addErrorMessage(data.message || t("misc.unknown_error"));
   });
 
@@ -2211,7 +2316,7 @@ deleteAllBtn?.addEventListener("click", async () => {
       showToast(t("sidebar.delete_fail", {error: result.error}));
       return;
     }
-    currentSessionId = null;
+    state.sessionId = null;
     _loadedSessionId = null;
     messageList.innerHTML = "";
     showWelcome();
