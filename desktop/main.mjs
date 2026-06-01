@@ -2,7 +2,7 @@
 // Thin entry: app lifecycle + window creation + module wiring.
 // All business logic lives in core/*.mjs modules.
 
-import { app, BrowserWindow, session, Menu } from "electron";
+import { app, BrowserWindow, session, Menu, nativeImage } from "electron";
 import { join } from "node:path";
 import mcpManager from "./mcp-manager.mjs";
 import sessionDb from "./session-db.mjs";
@@ -36,7 +36,7 @@ function createWindow() {
     width: 1200, height: 800,
     minWidth: 800, minHeight: 600,
     title: "AI Code Chat",
-    icon: join(PROJECT_ROOT, "icon.ico"),
+    icon: nativeImage.createFromPath(join(PROJECT_ROOT, "icon.png")),
     backgroundColor: "#0a0a0f",
     webPreferences: {
       preload: preloadPath,

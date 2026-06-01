@@ -2,10 +2,12 @@
   "name": "goodagent-desktop",
   "version": "1.0.1",
   "description": "GoodAgent Desktop — Electron GUI wrapper",
+  "author": "quanzefeng <quanzefeng@gmail.com>",
+  "homepage": "https://github.com/quanzefeng/GoodAgent",
   "type": "module",
   "main": "main.mjs",
   "scripts": {
-    "start": "electron .",
+    "start": "ELECTRON_DISABLE_SANDBOX=1 electron .",
     "dev": "electron . --dev",
     "dist:win": "electron-builder --win nsis",
     "dist:mac": "electron-builder --mac dmg",
@@ -27,10 +29,11 @@
     "productName": "GoodAgent",
     "asar": true,
     "files": [
-      "main.mjs",
+      "*.mjs",
       "preload.cjs",
-      "update-manager.mjs",
-      "renderer/**"
+      "preload.js",
+      "renderer/**",
+      "core/**"
     ],
     "extraResources": [
       {
