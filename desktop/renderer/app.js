@@ -958,6 +958,7 @@ function resetChat() {
     promptInput.value = "";
     setStatus(t("status.ready"));
     refreshSessionList();
+    requestAnimationFrame(() => promptInput.focus());
     return;
   }
   window.goodAgent.resetSession();
@@ -985,6 +986,7 @@ function resetChat() {
   promptInput.value = "";
   setStatus(t("status.ready"));
   refreshSessionList();
+  requestAnimationFrame(() => promptInput.focus());
 }
 
 /* ── Session List ──────────────────────────────────────────── */
@@ -1139,12 +1141,12 @@ function rebuildMessages(data) {
 }
 
 // Delegate click events on session-list (handles load, delete, export)
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const deleteBtn = e.target.closest(".session-delete");
   if (deleteBtn) {
     e.stopPropagation();
     const id = deleteBtn.dataset.sessionId;
-    if (id && confirm(t("sidebar.delete_confirm"))) {
+    if (id && await showConfirmDialog(t("sidebar.delete_confirm"))) {
       window.goodAgent.deleteSession(id).then(() => {
         if (_loadedSessionId === id) _loadedSessionId = null;
         refreshSessionList();
@@ -1646,6 +1648,32 @@ function resetAvatar() {
   loadAvatar();
 }
 
+/* ── Custom Confirm Dialog (avoid native confirm() focus bug in Electron) ── */
+function showConfirmDialog(msg) {
+  return new Promise(resolve => {
+    const modal = document.getElementById("confirm-modal");
+    const message = document.getElementById("confirm-modal-message");
+    const okBtn = document.getElementById("confirm-modal-ok");
+    const cancelBtn = document.getElementById("confirm-modal-cancel");
+    if (!modal || !message || !okBtn || !cancelBtn) { resolve(true); return; }
+    message.textContent = msg;
+    modal.classList.add("active");
+    const cleanup = () => {
+      modal.classList.remove("active");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+    };
+    const onOk = () => { cleanup(); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    // Click outside to cancel
+    modal.addEventListener("click", function onClickOut(e) {
+      if (e.target === modal) { cleanup(); modal.removeEventListener("click", onClickOut); resolve(false); }
+    });
+  });
+}
+
 // Detect image format from magic bytes (not file extension)
 function detectMimeFromHeader(header) {
   const bytes = new Uint8Array(header);
@@ -1785,7 +1813,7 @@ async function loadMcpServers() {
     listEl.querySelectorAll(".mcp-remove-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const name = btn.dataset.name;
-        if (!confirm(t("mcp.remove_confirm", {name}))) return;
+        if (!await showConfirmDialog(t("mcp.remove_confirm", {name}))) return;
         btn.disabled = true;
         const result = await window.goodAgent.mcpRemove(name);
         if (!result.success) {
@@ -2229,7 +2257,7 @@ function renderPromptEditor() {
       if (currentProfileId === "default") return;
       const p = getCurrentProfile();
       if (!p) return;
-      if (!confirm(t("prompt.delete_confirm", {name: p.name}))) return;
+      if (!await showConfirmDialog(t("prompt.delete_confirm", {name: p.name}))) return;
       await window.goodAgent.deletePromptProfile(currentProfileId);
       delete promptStore.profiles[currentProfileId];
       currentProfileId = "default";
@@ -2342,7 +2370,7 @@ settingsSaveBtn?.addEventListener("click", saveSettingsForm);
 // Delete all sessions
 const deleteAllBtn = $("#delete-all-sessions-btn");
 deleteAllBtn?.addEventListener("click", async () => {
-  if (!confirm(t("sidebar.clear_confirm"))) return;
+  if (!await showConfirmDialog(t("sidebar.clear_confirm"))) return;
   try {
     const result = await window.goodAgent.deleteAllSessions();
     if (result && result.error) {
@@ -2391,6 +2419,13 @@ promptInput.addEventListener("keydown", (e) => {
 sendBtn.addEventListener("click", submitQuery);
 stopBtn.addEventListener("click", abortQuery);
 newChatBtn.addEventListener("click", resetChat);
+
+// Auto-focus input when window regains focus (fixes Electron focus loss after confirm() / alt-tab)
+window.addEventListener("focus", () => {
+  if (!state.isStreaming && !settingsModal.classList.contains("active")) {
+    requestAnimationFrame(() => promptInput.focus());
+  }
+});
 
 /* ── Init ──────────────────────────────────────────────── */
 setupIPC();

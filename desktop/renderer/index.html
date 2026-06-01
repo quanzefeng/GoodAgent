@@ -33,6 +33,22 @@
     </div>
   </div>
 
+  <!-- Confirm Modal (replaces native confirm() to avoid Electron focus loss) -->
+  <div id="confirm-modal" class="modal">
+    <div class="modal-content" style="max-width:400px;">
+      <div class="modal-header">
+        <h2 style="font-size:16px;font-weight:600;color:var(--text-primary);">确认</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" style="font-size:14px;line-height:1.5;"></p>
+      </div>
+      <div class="modal-footer" style="border:none;padding-top:0;">
+        <button id="confirm-modal-cancel" class="btn" style="margin-right:8px;">取消</button>
+        <button id="confirm-modal-ok" class="btn primary">确认</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Ask Question Modal -->
   <div id="ask-modal" class="modal">
     <div class="modal-content" style="max-width:560px;">
