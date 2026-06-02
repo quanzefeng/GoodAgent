@@ -1,7 +1,7 @@
 // ── Tool Executor — runTool dispatch ────────────────────────
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -59,8 +59,40 @@ function runShell(command, opts = {}) {
   });
 }
 
+// Safe spawn: exe + args array, no shell interpolation → no injection
+function runSpawnSafe(exe, args, opts = {}) {
+  return new Promise(resolve => {
+    try {
+      const child = spawn(exe, args, {
+        cwd: getWorkspace(), shell: false, timeout: opts.timeout || 60000,
+      });
+      const chunks = { out: [], err: [] };
+      child.stdout.on("data", c => chunks.out.push(c));
+      child.stderr.on("data", c => chunks.err.push(c));
+      child.on("close", code => {
+        const out = Buffer.concat(chunks.out).toString("utf-8").trim();
+        const err = Buffer.concat(chunks.err).toString("utf-8").trim();
+        resolve({ out, err, code });
+      });
+      child.on("error", e => resolve({ error: e.message }));
+    } catch (e) { resolve({ error: e.message }); }
+  });
+}
+
 // Backward-compat alias — the old name still works.
 export const runPowerShell = runShell;
+
+// ── URL safety check — block internal/private hosts ───────
+function isSafeUrl(u) {
+  try {
+    const x = new URL(u);
+    if (!/^https?:$/.test(x.protocol)) return false;
+    const host = x.hostname;
+    if (host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1") return false;
+    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|fc00:|fe80:)/.test(host)) return false;
+    return true;
+  } catch { return false; }
+}
 
 // Lazy imports for circular dependency avoidance
 let _runSubAgent = null;
@@ -178,6 +210,7 @@ export async function runTool(tc) {
     }
     case "web_fetch": {
       try {
+        if (!isSafeUrl(args.url)) return { error: `URL not allowed. Only https?:// to public hosts are permitted.` };
         const maxLen = Math.min(args.max_length || 8000, 50000);
         const res = await fetch(args.url, {
           headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
@@ -220,7 +253,7 @@ export async function runTool(tc) {
         const installedSkills = scanSkills();
         const skill = installedSkills.find(s => s.name === args.name);
         if (!skill) return { error: `Skill "${args.name}" not found. Available: ${installedSkills.map(s => s.name).join(", ")}` };
-        const content = require("node:fs").readFileSync(skill.path, "utf-8");
+        const content = readFileSync(skill.path, "utf-8");
         return { name: skill.name, description: skill.description, content };
       } catch (e) { return { error: e.message }; }
     }
@@ -428,8 +461,9 @@ export async function runTool(tc) {
           const diff = await runShell("git diff --cached");
           return { needsMessage: true, diff: (diff.out || "").slice(0, 8000), hint: "请根据以上 diff 生成 commit message，然后再次调用 git_commit 并传入 message 参数。" };
         }
-        const flag = args.amend ? "--amend" : "";
-        const r = await runShell(`git commit ${flag} -m "${msg.replace(/"/g, '\\"')}"`);
+        const gitArgs = ["commit", "-m", msg];
+        if (args.amend) gitArgs.unshift("--amend");
+        const r = await runSpawnSafe("git", gitArgs);
         return { output: r.out || r.err, success: r.code === 0 };
       } catch (e) { return { error: e.message }; }
     }
@@ -439,8 +473,8 @@ export async function runTool(tc) {
         switch (args.action) {
           case "list": r = await runShell("git branch"); break;
           case "current": r = await runShell("git branch --show-current"); break;
-          case "create": r = await runShell(`git checkout -b "${args.name}"`); break;
-          case "switch": r = await runShell(`git checkout "${args.name}"`); break;
+          case "create": r = await runSpawnSafe("git", ["checkout", "-b", args.name]); break;
+          case "switch": r = await runSpawnSafe("git", ["checkout", args.name]); break;
           default: return { error: `Unknown action: ${args.action}` };
         }
         return { output: r.out || r.err, success: r.code === 0 };
@@ -451,13 +485,13 @@ export async function runTool(tc) {
         let cmd;
         switch (args.action) {
           case "create": {
-            const parts = ["gh pr create"];
-            if (args.title) parts.push(`--title "${args.title.replace(/"/g, '\\"')}"`);
-            if (args.body) parts.push(`--body "${args.body.replace(/"/g, '\\"')}"`);
-            if (args.base) parts.push(`--base "${args.base}"`);
-            if (args.head) parts.push(`--head "${args.head}"`);
-            cmd = parts.join(" ");
-            break;
+            const ghArgs = ["pr", "create"];
+            if (args.title) ghArgs.push("--title", args.title);
+            if (args.body) ghArgs.push("--body", args.body);
+            if (args.base) ghArgs.push("--base", args.base);
+            if (args.head) ghArgs.push("--head", args.head);
+            const r = await runSpawnSafe("gh", ghArgs);
+            return { output: r.out || r.err, success: r.code === 0 };
           }
           case "view": {
             cmd = args.pr ? `gh pr view ${args.pr}` : "gh pr view";
@@ -502,11 +536,11 @@ export async function runTool(tc) {
         let cmd;
         switch (args.action) {
           case "create": {
-            const parts = ["gh issue create"];
-            if (args.title) parts.push(`--title "${args.title.replace(/"/g, '\\"')}"`);
-            if (args.body) parts.push(`--body "${args.body.replace(/"/g, '\\"')}"`);
-            cmd = parts.join(" ");
-            break;
+            const ghArgs = ["issue", "create"];
+            if (args.title) ghArgs.push("--title", args.title);
+            if (args.body) ghArgs.push("--body", args.body);
+            const r = await runSpawnSafe("gh", ghArgs);
+            return { output: r.out || r.err, success: r.code === 0 };
           }
           case "view": {
             cmd = args.issue ? `gh issue view ${args.issue}` : "gh issue view";

@@ -57,7 +57,7 @@ export function compressContext(msgs, budget) {
   if (afterTruncation.totalTokens <= budget) return { estimatedTokens: afterTruncation.totalTokens, compressed: true, removedMessages: 0 };
 
   const systemEnd = msgs.findIndex(m => m.role !== "system");
-  if (systemEnd === -1) return { estimatedTokens: afterPruning.totalTokens, compressed: true, removedMessages };
+  if (systemEnd === -1) return { estimatedTokens: afterTruncation.totalTokens, compressed: true, removedMessages };
   while (msgs.length > systemEnd + 10) {
     msgs.splice(systemEnd, 1);
     removedMessages++;
@@ -77,6 +77,70 @@ export function sendContextUsage(msgs) {
     windowSize: CONTEXT_WINDOW,
     usagePct: Math.round((usage.totalTokens / CONTEXT_WINDOW) * 100),
   });
+}
+
+export async function summarizeForContinuation(msgs, apiKey, apiUrl, model, apiFormat) {
+  const convText = msgs.slice(1).map(m => {
+    const role = m.role === "user" ? "用户" : m.role === "assistant" ? "助手" : m.role === "tool" ? "工具返回" : m.role;
+    const text = (typeof m.content === "string" ? m.content : JSON.stringify(m.content || ""))
+      .replace(/[\r\n\t]+/g, " ").trim().slice(0, 600);
+    return `[${role}]: ${text}`;
+  }).join("\n");
+
+  const compactPrompt = `你是一个对话摘要助手。请总结以下对话，保留关键信息：
+
+**必须保留：** 具体文件名、函数名、错误信息、用户需求和偏好、已做出的决策、代码改动
+**必须丢弃：** 问候语、重复内容、工具调用原始输出细节
+
+对话：
+${convText}
+
+用一段中文简要总结（包括：已完成什么、正在做什么、还需要做什么）：`;
+
+  try {
+    const body = {
+      model: model || "deepseek-chat",
+      messages: [{ role: "user", content: compactPrompt }],
+      max_tokens: 2048,
+      stream: false,
+    };
+    const endpoint = apiFormat === "anthropic"
+      ? apiUrl.replace(/\/+$/, "").replace(/\/v1\/messages$/, "").replace(/\/v1$/, "") + "/v1/messages"
+      : apiUrl;
+    const headers = apiFormat === "anthropic"
+      ? { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
+      : { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
+
+    if (apiFormat === "anthropic") {
+      body.system = "你是一个专业的对话摘要助手。";
+      body.model = model || "claude-sonnet-4-20250514";
+    }
+
+    const res = await fetch(endpoint, {
+      method: "POST", headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error(`Summarize failed: ${res.status}`);
+    const data = await res.json();
+    const summary = apiFormat === "anthropic"
+      ? (data.content?.[0]?.text || "")
+      : (data.choices?.[0]?.message?.content || "");
+
+    if (summary && summary.trim().length > 20) return summary.trim();
+  } catch (e) {
+    console.error("[token-budget] summarizeForContinuation failed:", e.message);
+  }
+
+  // Fallback: simple truncation-based summary
+  const lines = ["## 对话摘要\n"];
+  for (const m of msgs.slice(1, -6)) {
+    const role = m.role === "user" ? "用户" : m.role === "assistant" ? "助手" : "";
+    if (!role) continue;
+    const text = (typeof m.content === "string" ? m.content : "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 250);
+    if (text) lines.push(`- **${role}：** ${text}`);
+  }
+  return lines.join("\n");
 }
 
 export { TOKEN_BUDGET_WARN, TOKEN_BUDGET_HARD };

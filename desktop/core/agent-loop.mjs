@@ -5,12 +5,13 @@ import { buildSystemPrompt } from "./system-prompt.mjs";
 import { openaiCall, anthropicCall } from "./format-adapters.mjs";
 import { selectRelevantMemories } from "./memory-selection.mjs";
 import { runTool } from "./tool-executor.mjs";
-import { compressContext, sendContextUsage, estimateTokens, trimToBudget, TOKEN_BUDGET_WARN, TOKEN_BUDGET_HARD } from "./token-budget.mjs";
+import { compressContext, sendContextUsage, estimateTokens, estimateMessageTokens, trimToBudget, TOKEN_BUDGET_WARN, TOKEN_BUDGET_HARD, summarizeForContinuation } from "./token-budget.mjs";
 import {
   getSessionId, setSessionId, getHistory, setHistory,
   getAbortCtrl, setAbortCtrl,
   taskStore, getTodoList,
-  sendToRenderer, genId, MAX_OUTPUT, MAX_TURNS,
+  sendToRenderer, genId, MAX_OUTPUT, MAX_TURNS, MAX_CONTINUATIONS,
+  CONTEXT_WINDOW, CONTEXT_COMPRESS_PCT,
 } from "./state.mjs";
 
 function getHistoryTitle(history) {
@@ -122,79 +123,124 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
   }
 
   const history = getHistory();
-  const msgs = [{ role: "system", content: sysContent }, ...history.map(m => ({ ...m })), userMessage];
-  let turns = 0;
+  let msgs = [{ role: "system", content: sysContent }, ...history.map(m => ({ ...m })), userMessage];
   let allText = "", allReasoning = "";
+  let continuation = 0;
+  let agentFinished = false;
 
   compressContext(msgs);
   sendContextUsage(msgs);
 
-  while (turns < MAX_TURNS) {
-    turns++;
-    compressContext(msgs);
-    sendContextUsage(msgs);
+  // ── Continuation loop: auto-compress and continue on context overflow ──
+  while (continuation < MAX_CONTINUATIONS && !agentFinished) {
+    continuation++;
+    let turns = 0;
 
-    let content, reasoningContent, tcs;
-    try {
-      const callFn = apiFormat === "anthropic" ? anthropicCall : openaiCall;
-      const result = await callFn(msgs, apiUrl, apiKey, model, signal, reasoning, kbEnabled, webSearchEnabled);
-      content = result.content;
-      reasoningContent = result.reasoningContent || "";
-      allText += result.content;
-      if (reasoningContent) allReasoning += reasoningContent;
-      tcs = result.tcs;
-    } catch (err) {
-      if (err.name === "AbortError") return { text: allText, aborted: true };
-      throw err;
+    if (continuation > 1) {
+      const banner = `\n\n--- 第 ${continuation} 次自动继续 ---\n`;
+      allText += banner;
+      sendToRenderer("stream:chunk", { content: banner });
     }
 
-    const asst = { role: "assistant", content: content || null };
-    if (reasoningContent) asst.reasoning_content = reasoningContent;
-    if (tcs.length > 0) asst.tool_calls = tcs;
-    msgs.push(asst);
+    while (turns < MAX_TURNS) {
+      turns++;
+      compressContext(msgs);
 
-    if (tcs.length === 0) break;
-
-    // ── Execute tools (Agent calls in parallel, others sequential) ──
-    const agentCalls = tcs.filter(tc => tc.function?.name === "Agent");
-    const otherCalls = tcs.filter(tc => tc.function?.name !== "Agent");
-
-    if (agentCalls.length > 0) {
-      for (const tc of agentCalls) {
-        let args;
-        try { args = JSON.parse(tc.function.arguments); } catch { args = { raw: tc.function.arguments }; }
-        sendToRenderer("tool:start", { name: "Agent", args });
+      // Check context overflow — break to continuation
+      const usage = estimateMessageTokens(msgs);
+      const contextPct = usage.totalTokens / CONTEXT_WINDOW;
+      if (contextPct > CONTEXT_COMPRESS_PCT) {
+        console.log(`[agent-loop] Context at ${Math.round(contextPct * 100)}%, triggering continuation`);
+        break;
       }
 
-      const agentResults = await Promise.allSettled(
-        agentCalls.map(tc => runTool(tc))
-      );
+      sendContextUsage(msgs);
 
-      for (let i = 0; i < agentCalls.length; i++) {
-        const tc = agentCalls[i];
-        const settled = agentResults[i];
-        const result = settled.status === "fulfilled"
-          ? settled.value
-          : { error: settled.reason?.message || "Sub-agent failed" };
+      let content, reasoningContent, tcs;
+      try {
+        const callFn = apiFormat === "anthropic" ? anthropicCall : openaiCall;
+        const result = await callFn(msgs, apiUrl, apiKey, model, signal, reasoning, kbEnabled, webSearchEnabled);
+        content = result.content;
+        reasoningContent = result.reasoningContent || "";
+        allText += result.content;
+        if (reasoningContent) allReasoning += reasoningContent;
+        tcs = result.tcs;
+      } catch (err) {
+        if (err.name === "AbortError") return { text: allText, aborted: true };
+        throw err;
+      }
+
+      const asst = { role: "assistant", content: content || null };
+      if (reasoningContent) asst.reasoning_content = reasoningContent;
+      if (tcs.length > 0) asst.tool_calls = tcs;
+      msgs.push(asst);
+
+      if (tcs.length === 0) { agentFinished = true; break; }
+
+      // ── Execute tools (Agent calls in parallel, others sequential) ──
+      const agentCalls = tcs.filter(tc => tc.function?.name === "Agent");
+      const otherCalls = tcs.filter(tc => tc.function?.name !== "Agent");
+
+      if (agentCalls.length > 0) {
+        for (const tc of agentCalls) {
+          let args;
+          try { args = JSON.parse(tc.function.arguments); } catch { args = { raw: tc.function.arguments }; }
+          sendToRenderer("tool:start", { name: "Agent", args });
+        }
+
+        const agentResults = await Promise.allSettled(
+          agentCalls.map(tc => runTool(tc))
+        );
+
+        for (let i = 0; i < agentCalls.length; i++) {
+          const tc = agentCalls[i];
+          const settled = agentResults[i];
+          const result = settled.status === "fulfilled"
+            ? settled.value
+            : { error: settled.reason?.message || "Sub-agent failed" };
+          let rStr = JSON.stringify(result);
+          if (rStr.length > MAX_OUTPUT) rStr = rStr.slice(0, MAX_OUTPUT) + "\n...(truncated)";
+          sendToRenderer("tool:result", { name: "Agent", result });
+          msgs.push({ role: "tool", tool_call_id: tc.id, content: rStr });
+        }
+      }
+
+      for (const tc of otherCalls) {
+        let args;
+        try { args = JSON.parse(tc.function.arguments); } catch { args = { raw: tc.function.arguments }; }
+        sendToRenderer("tool:start", { name: tc.function.name, args });
+
+        let result;
+        try { result = await runTool(tc); } catch (e) { result = { error: e.message }; }
+
         let rStr = JSON.stringify(result);
         if (rStr.length > MAX_OUTPUT) rStr = rStr.slice(0, MAX_OUTPUT) + "\n...(truncated)";
-        sendToRenderer("tool:result", { name: "Agent", result });
+        sendToRenderer("tool:result", { name: tc.function.name, result });
         msgs.push({ role: "tool", tool_call_id: tc.id, content: rStr });
       }
     }
 
-    for (const tc of otherCalls) {
-      let args;
-      try { args = JSON.parse(tc.function.arguments); } catch { args = { raw: tc.function.arguments }; }
-      sendToRenderer("tool:start", { name: tc.function.name, args });
+    if (agentFinished) break;
 
-      let result;
-      try { result = await runTool(tc); } catch (e) { result = { error: e.message }; }
+    // ── Continuation: summarize and compress ──
+    if (continuation < MAX_CONTINUATIONS) {
+      sendToRenderer("context:continuation-start", { continuation, max: MAX_CONTINUATIONS });
 
-      let rStr = JSON.stringify(result);
-      if (rStr.length > MAX_OUTPUT) rStr = rStr.slice(0, MAX_OUTPUT) + "\n...(truncated)";
-      sendToRenderer("tool:result", { name: tc.function.name, result });
-      msgs.push({ role: "tool", tool_call_id: tc.id, content: rStr });
+      const summary = await summarizeForContinuation(msgs, apiKey, apiUrl, model, apiFormat);
+
+      const sysMsg = msgs[0];
+      const recentMsgs = msgs.slice(-6);
+      const headerMsg = `## 📋 对话摘要（第 ${continuation} 次自动压缩）\n\n${summary}\n\n请继续完成未完成的工作，避免重复已完成的内容。`;
+
+      msgs = [sysMsg, { role: "system", content: headerMsg }, ...recentMsgs];
+
+      sendToRenderer("context:continuation-done", {
+        continuation,
+        max: MAX_CONTINUATIONS,
+        summaryTokens: estimateTokens(summary),
+        contextAfterTokens: estimateMessageTokens(msgs).totalTokens,
+      });
+      sendContextUsage(msgs);
     }
   }
 

@@ -1,5 +1,10 @@
 let _kbPanelLoaded = false;
 
+function escapeHtml(s) {
+  if (!s || typeof s !== "string") return "";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 export async function loadKnowledgeBasePanel() {
   if (_kbPanelLoaded) return;
   _kbPanelLoaded = true;
@@ -23,14 +28,24 @@ export async function loadKnowledgeBasePanel() {
 
   async function fetchOllamaModels(selectedModel) {
     if (!ollamaModelSelect) return;
-    ollamaModelSelect.innerHTML = '<option value="">检测中…</option>';
+    ollamaModelSelect.replaceChildren();
+    const opt = document.createElement("option");
+    opt.value = ""; opt.textContent = "检测中…";
+    ollamaModelSelect.appendChild(opt);
     try {
       const models = await window.goodAgent.kbOllamaModels();
-      ollamaModelSelect.innerHTML = models.length > 0
-        ? models.map(m => `<option value="${m}">${m}</option>`).join("")
-        : '<option value="nomic-embed-text">nomic-embed-text</option>';
+      ollamaModelSelect.replaceChildren();
+      const list = models.length > 0 ? models : ["nomic-embed-text"];
+      for (const m of list) {
+        const o = document.createElement("option");
+        o.value = m; o.textContent = m;
+        ollamaModelSelect.appendChild(o);
+      }
     } catch {
-      ollamaModelSelect.innerHTML = '<option value="nomic-embed-text">nomic-embed-text</option>';
+      ollamaModelSelect.replaceChildren();
+      const o = document.createElement("option");
+      o.value = "nomic-embed-text"; o.textContent = "nomic-embed-text";
+      ollamaModelSelect.appendChild(o);
     }
     if (selectedModel) ollamaModelSelect.value = selectedModel;
   }
@@ -132,22 +147,48 @@ export async function loadKnowledgeBasePanel() {
     if (e.key === "Enter") {
       const query = testQuery.value.trim();
       if (!query) return;
-      testResults.innerHTML = `<div style='color:var(--text-muted);font-size:12px;'>${t("kb.searching")}</div>`;
+      testResults.textContent = ""; // clear
+      const statusDiv = document.createElement("div");
+      statusDiv.style.cssText = "color:var(--text-muted);font-size:12px;";
+      statusDiv.textContent = t("kb.searching");
+      testResults.appendChild(statusDiv);
       try {
         const results = await window.goodAgent.kbSearch(query, 5);
+        testResults.replaceChildren();
         if (results.length === 0) {
-          testResults.innerHTML = `<div style='color:var(--text-muted);font-size:12px;'>${t("kb.no_results")}</div>`;
+          const noDiv = document.createElement("div");
+          noDiv.style.cssText = "color:var(--text-muted);font-size:12px;";
+          noDiv.textContent = t("kb.no_results");
+          testResults.appendChild(noDiv);
           return;
         }
-        testResults.innerHTML = results.map(r => `
-          <div class="kb-result-item">
-            <div class="kb-result-title">${r.title || r.rel_path}</div>
-            <div class="kb-result-path">${r.rel_path}</div>
-            <div class="kb-result-snippet">${r.snippet || ""}</div>
-          </div>
-        `).join("");
+        for (const r of results) {
+          const item = document.createElement("div");
+          item.className = "kb-result-item";
+
+          const titleDiv = document.createElement("div");
+          titleDiv.className = "kb-result-title";
+          titleDiv.textContent = r.title || r.rel_path;
+          item.appendChild(titleDiv);
+
+          const pathDiv = document.createElement("div");
+          pathDiv.className = "kb-result-path";
+          pathDiv.textContent = r.rel_path;
+          item.appendChild(pathDiv);
+
+          const snippetDiv = document.createElement("div");
+          snippetDiv.className = "kb-result-snippet";
+          snippetDiv.textContent = r.snippet || "";
+          item.appendChild(snippetDiv);
+
+          testResults.appendChild(item);
+        }
       } catch (e) {
-        testResults.innerHTML = `<div style='color:var(--danger);font-size:12px;'>${e.message}</div>`;
+        testResults.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.cssText = "color:var(--danger);font-size:12px;";
+        errDiv.textContent = e.message;
+        testResults.appendChild(errDiv);
       }
     }
   });

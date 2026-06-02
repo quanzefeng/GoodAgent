@@ -27,7 +27,7 @@ export function toAnthropicMessages(msgs) {
   const messages = [];
   let system = null;
   for (const m of msgs) {
-    if (m.role === "system") { system = m.content; continue; }
+    if (m.role === "system") { system = system ? system + "\n\n" + m.content : m.content; continue; }
     if (m.role === "user") {
       const content = typeof m.content === "string" ? m.content
         : Array.isArray(m.content) ? m.content.map(c => {

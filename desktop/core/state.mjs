@@ -75,7 +75,8 @@ export const GH_SAFE = /^gh\s+(pr|issue|repo|gist|auth|api|browse|codespace|secr
 export const PS_UTF8_PREFIX = '$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ';
 
 // ── Agent Loop State ────────────────────────────────────────
-export const MAX_TURNS = 35;
+export const MAX_TURNS = 50;
+export const MAX_CONTINUATIONS = 5;
 export const CONTEXT_WINDOW = 262144;
 export const CONTEXT_WARN_PCT = 0.80;
 export const CONTEXT_COMPRESS_PCT = 0.90;
