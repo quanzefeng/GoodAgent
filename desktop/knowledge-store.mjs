@@ -20,7 +20,7 @@ const HOME = homedir();
 const DATA_DIR = join(HOME, ".goodagent");
 const DB_PATH = join(DATA_DIR, "knowledge.db");
 const CONFIG_PATH = join(DATA_DIR, "kb-config.json");
-const EMBEDDING_DIM = 384; // Unified dimension for all providers
+let _embeddingDim = 384; // Auto-detected at runtime from the actual embedding model
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 
@@ -301,25 +301,55 @@ async function getEmbedder() {
     if (p === "ollama") {
       try {
         const ollamaModel = _config.ollamaEmbedModel || "nomic-embed-text";
-        const res = await fetch("http://localhost:11434/api/embed", {
+
+        // Probe 1: detect native dimension (no dimensions param)
+        const probe1 = await fetch("http://localhost:11434/api/embed", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: ollamaModel, input: "test", options: { num_gpu: 99 } }),
           signal: AbortSignal.timeout(5000),
         });
-        if (res.ok) {
-          _embedder = { type: "ollama", model: ollamaModel };
-          _embedderReady = true;
-          console.log("[kb] Using Ollama embedder:", ollamaModel);
-          // Auto-detect model context length (only if user hasn't overridden)
-          if (_config.maxBodyChars === 0) {
-            const ctx = await detectModelContext(ollamaModel);
-            // 85% of context to leave tokenization headroom; assumes ~1.2 tok/char
-            _autoDetectedMaxBodyChars = Math.floor(ctx * 0.85);
-            console.log(`[kb] Auto-detected max body chars: ${_autoDetectedMaxBodyChars} (model context: ${ctx})`);
+        if (!probe1.ok) throw new Error("Ollama probe1 failed");
+        const p1data = await probe1.json();
+        const p1vec = p1data.embeddings?.[0];
+        if (!p1vec) throw new Error("Ollama returned no embedding");
+
+        const nativeDim = p1vec.length;
+
+        // Probe 2: if native > 384, test whether model supports MRL (dimensions param)
+        if (nativeDim > 384) {
+          try {
+            const probe2 = await fetch("http://localhost:11434/api/embed", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ model: ollamaModel, input: "test", dimensions: 384, options: { num_gpu: 99 } }),
+              signal: AbortSignal.timeout(5000),
+            });
+            if (probe2.ok) {
+              const p2data = await probe2.json();
+              const p2vec = p2data.embeddings?.[0];
+              _embeddingDim = (p2vec && p2vec.length === 384) ? 384 : nativeDim;
+            } else {
+              _embeddingDim = nativeDim;
+            }
+          } catch {
+            _embeddingDim = nativeDim;
           }
-          return _embedder;
         }
+
+        console.log(`[kb] Embedding dim: ${_embeddingDim} (native: ${nativeDim})${_embeddingDim < nativeDim ? ' via MRL' : _embeddingDim === 384 ? '' : ' (native >384, full dim stored)'}`);
+
+        _embedder = { type: "ollama", model: ollamaModel };
+        _embedderReady = true;
+        console.log("[kb] Using Ollama embedder:", ollamaModel);
+        // Auto-detect model context length (only if user hasn't overridden)
+        if (_config.maxBodyChars === 0) {
+          const ctx = await detectModelContext(ollamaModel);
+          // 85% of context to leave tokenization headroom; assumes ~1.2 tok/char
+          _autoDetectedMaxBodyChars = Math.floor(ctx * 0.85);
+          console.log(`[kb] Auto-detected max body chars: ${_autoDetectedMaxBodyChars} (model context: ${ctx})`);
+        }
+        return _embedder;
       } catch { /* ignored */ }
     }
 
@@ -359,24 +389,30 @@ async function embedText(text) {
       const res = await fetch("http://localhost:11434/api/embed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: _embedder.model, input: text, options: { num_gpu: 99 } }),
+        body: JSON.stringify(_embeddingDim === 384
+          ? { model: _embedder.model, input: text, dimensions: 384, options: { num_gpu: 99 } }
+          : { model: _embedder.model, input: text, options: { num_gpu: 99 } }),
         signal: AbortSignal.timeout(30000),
       });
       if (!res.ok) return null;
       const data = await res.json();
       const vec = data.embeddings?.[0];
       if (!vec) return null;
-      // Truncate/pad to EMBEDDING_DIM
-      const result = new Float32Array(EMBEDDING_DIM);
-      for (let i = 0; i < Math.min(vec.length, EMBEDDING_DIM); i++) result[i] = vec[i];
+      const result = new Float32Array(_embeddingDim);
+      for (let i = 0; i < Math.min(vec.length, _embeddingDim); i++) result[i] = vec[i];
       return result;
     }
 
     // Local HuggingFace transformer
     const output = await embedder(text, { pooling: "mean", normalize: true });
     const vec = output.data;
-    const result = new Float32Array(EMBEDDING_DIM);
-    for (let i = 0; i < Math.min(vec.length, EMBEDDING_DIM); i++) result[i] = vec[i];
+    // Auto-detect dimension on first local HF call
+    if (vec.length !== _embeddingDim) {
+      _embeddingDim = vec.length;
+      console.log(`[kb] Local embedder dim: ${_embeddingDim}`);
+    }
+    const result = new Float32Array(_embeddingDim);
+    for (let i = 0; i < Math.min(vec.length, _embeddingDim); i++) result[i] = vec[i];
     return result;
   } catch (e) {
     console.error("[kb] Embed failed:", e.message);
@@ -395,6 +431,10 @@ function bufferToVector(buf) {
 }
 
 function cosineSimilarity(a, b) {
+  if (a.length !== b.length) {
+    console.warn(`[kb] Dimension mismatch in similarity: ${a.length} vs ${b.length}. Rebuild index.`);
+    return 0;
+  }
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
@@ -505,7 +545,7 @@ export async function rebuildIndex(progressCb) {
       }
       if (embedding) {
         db.prepare("INSERT INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
-          .run(noteId, vectorToBuffer(embedding), EMBEDDING_DIM);
+          .run(noteId, vectorToBuffer(embedding), _embeddingDim);
         embedded++;
       } else {
         console.error(`[kb] Embed failed after 3 attempts: ${note.relPath}`);
@@ -669,10 +709,10 @@ export async function createNote(relPath, content, tags = []) {
       const max = getEffectiveMaxBodyChars();
       const embedding = await embedText(title + "\n" + body.slice(0, max));
       if (embedding) {
-        getDb().prepare("INSERT INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
-          .run(result.lastInsertRowid, vectorToBuffer(embedding), EMBEDDING_DIM);
-      }
-    } catch { /* ignored */ }
+          getDb().prepare("INSERT INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
+            .run(result.lastInsertRowid, vectorToBuffer(embedding), _embeddingDim);
+        }
+      } catch { /* ignored */ }
 
     return { ok: true, relPath, title };
   } catch (e) { return { error: e.message }; }
@@ -706,7 +746,7 @@ export async function updateNote(relPath, content) {
         const note = getDb().prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(relPath);
         if (note) {
           getDb().prepare("REPLACE INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
-            .run(note.id, vectorToBuffer(embedding), EMBEDDING_DIM);
+            .run(note.id, vectorToBuffer(embedding), _embeddingDim);
         }
       }
     } catch { /* ignored */ }
