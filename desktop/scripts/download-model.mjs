@@ -3,6 +3,12 @@ import { existsSync, mkdirSync, createWriteStream } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Skip download on CI (model is bundled via extraResources in electron-builder)
+if (process.env.CI) {
+  console.log("CI detected — skipping model download (bundled at build time)");
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MODELS_DIR = join(__dirname, "..", "models", "all-MiniLM-L6-v2");
 
@@ -55,7 +61,9 @@ console.log("Downloading MiniLM-L6-v2 ONNX model...");
 for (const file of FILES) {
   console.log(`  ${file}`);
   let ok = false;
-  for (const base of BASES) {
+  for (let i = 0; i < BASES.length; i++) {
+    const base = BASES[i];
+    if (i > 0) await new Promise(r => setTimeout(r, 3000)); // delay between mirrors to avoid rate limits
     try {
       await download(`${base}/${file}`, join(MODELS_DIR, file));
       ok = true;
