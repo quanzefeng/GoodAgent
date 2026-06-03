@@ -91,6 +91,9 @@ const settingsUrl = $("#settings-url");
 const settingsModel = $("#settings-model");
 const settingsModelInput = $("#settings-model-input");
 const settingsKey = $("#settings-key");
+const settingsSearchProvider = $("#settings-search-provider");
+const settingsTavilyKey = $("#settings-tavily-key");
+const tavilyKeyRow = $("#tavily-key-row");
 const settingsSaveBtn = $("#settings-save-btn");
 const settingsStatus = $("#settings-status");
 const avatarFileInput = $("#avatar-file-input");
@@ -645,6 +648,22 @@ function fillSettingsForm() {
       populateModelDropdown(preset, selectedModel);
     }
     if (settingsKey) settingsKey.value = cfg.apiKey;
+    // Load search provider + Tavily key
+    if (settingsSearchProvider) {
+      const saved = localStorage.getItem("goodagent_search_provider") || "tavily";
+      settingsSearchProvider.value = saved;
+      if (tavilyKeyRow) tavilyKeyRow.style.display = saved === "tavily" ? "block" : "none";
+    }
+    if (settingsTavilyKey) {
+      // Try encrypted store first, then env var
+      window.goodAgent.loadApiKey("tavily").then(k => {
+        if (k) { settingsTavilyKey.value = k; return; }
+        // Auto-detect from environment
+        window.goodAgent.getEnvVar("TAVILY_API_KEY").then(envKey => {
+          if (envKey) settingsTavilyKey.value = envKey;
+        }).catch(() => {});
+      }).catch(() => {});
+    }
   } finally {
     _fillingForm = false;
   }
@@ -666,8 +685,15 @@ function onProviderChange() {
     settingsUrl.value = savedUrl;
     populateModelDropdown(null, savedModel);
   }
-  const savedKey = localStorage.getItem(key ? `goodagent_api_key_${key}` : "goodagent_api_key") || "";
-  if (settingsKey) settingsKey.value = savedKey;
+  // Load from encrypted key store (not localStorage — keys were migrated)
+  if (settingsKey) {
+    settingsKey.value = _apiKeyCache[key] || "";
+    if (!_apiKeyCache[key] && key) {
+      window.goodAgent.loadApiKey(key).then(k => {
+        if (k) { _apiKeyCache[key] = k; settingsKey.value = k; }
+      }).catch(() => {});
+    }
+  }
 }
 
 function normalizeApiUrl(url) {
@@ -712,6 +738,16 @@ async function saveSettingsForm() {
   }
 
   await saveApiConfig(provider, apiUrl, model, apiKey, apiFormat);
+  // Save search provider preference (localStorage for UI + config file for main process)
+  if (settingsSearchProvider) {
+    localStorage.setItem("goodagent_search_provider", settingsSearchProvider.value);
+    window.goodAgent.saveApiKey("_search_provider", settingsSearchProvider.value).catch(() => {});
+  }
+  // Save Tavily key if provided
+  const tavilyKey = (settingsTavilyKey?.value || "").trim();
+  if (tavilyKey) {
+    await window.goodAgent.saveApiKey("tavily", tavilyKey);
+  }
   // Sync to WeChat bot config so WeChat uses updated API
   window.goodAgent.syncApiToWechat?.({ apiUrl, apiKey, model, apiFormat }).catch(() => {});
   updateConfigBanner();
@@ -2380,6 +2416,9 @@ document.getElementById("settings-fetch-models-btn")?.addEventListener("click", 
 
 // Settings save
 settingsSaveBtn?.addEventListener("click", saveSettingsForm);
+settingsSearchProvider?.addEventListener("change", () => {
+  if (tavilyKeyRow) tavilyKeyRow.style.display = settingsSearchProvider.value === "tavily" ? "block" : "none";
+});
 
 // Delete all sessions
 const deleteAllBtn = $("#delete-all-sessions-btn");

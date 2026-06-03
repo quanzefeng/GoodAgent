@@ -3,8 +3,10 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { safeStorage } from "electron";
 import * as memory from "../memory-store.mjs";
 import * as skills from "../skills-store.mjs";
 import * as kb from "../knowledge-store.mjs";
@@ -82,6 +84,21 @@ function runSpawnSafe(exe, args, opts = {}) {
 
 // Backward-compat alias — the old name still works.
 export const runPowerShell = runShell;
+
+// Read search provider preference from config file
+function readSearchProviderPref() {
+  try {
+    const keyPath = join(homedir(), ".goodagent", "api-keys.enc");
+    if (existsSync(keyPath)) {
+      const data = readFileSync(keyPath);
+      const store = safeStorage.isEncryptionAvailable()
+        ? JSON.parse(safeStorage.decryptString(data))
+        : JSON.parse(data.toString("utf8"));
+      if (store._search_provider) return store._search_provider;
+    }
+  } catch {}
+  return null; // null = no preference saved, will use Tavily if key available
+}
 
 // ── URL safety check — block internal/private hosts ───────
 function isSafeUrl(u) {
@@ -245,17 +262,54 @@ export async function runTool(tc) {
     case "web_search": {
       try {
         const maxRes = Math.min(args.max_results || 5, 10);
-        const apiKey = process.env.TAVILY_API_KEY;
-        if (!apiKey) return { error: "TAVILY_API_KEY environment variable not set. Set it to enable web search." };
-        const res = await fetch("https://api.tavily.com/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ query: args.query, max_results: maxRes, search_depth: "basic", topic: "general", include_answer: false }),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!res.ok) return { error: `Tavily API ${res.status}: ${res.statusText}` };
-        const data = await res.json();
-        return { query: args.query, results: data.results?.map(r => ({ title: r.title, url: r.url, content: r.content, score: r.score })) || [] };
+        const query = args.query;
+
+        // Default to Tavily unless user explicitly chose DuckDuckGo
+        const savedPref = readSearchProviderPref();
+        const searchProvider = savedPref === "duckduckgo" ? "duckduckgo" : "tavily";
+        if (searchProvider === "tavily") {
+          let tavilyKey = process.env.TAVILY_API_KEY;
+          if (!tavilyKey) {
+            try {
+              const keyPath = join(homedir(), ".goodagent", "api-keys.enc");
+              if (existsSync(keyPath)) {
+                const data = readFileSync(keyPath);
+                const store = safeStorage.isEncryptionAvailable()
+                  ? JSON.parse(safeStorage.decryptString(data))
+                  : JSON.parse(data.toString("utf8"));
+                tavilyKey = store.tavily;
+              }
+            } catch { /* fallback */ }
+          }
+          if (tavilyKey) {
+            const res = await fetch("https://api.tavily.com/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavilyKey}` },
+              body: JSON.stringify({ query, max_results: maxRes, search_depth: "basic", topic: "general", include_answer: false }),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              return { query, provider: "tavily", results: data.results?.map(r => ({ title: r.title, url: r.url, content: r.content, score: r.score })) || [] };
+            }
+          }
+        }
+
+        // DuckDuckGo fallback (free, no API key required)
+        const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1`;
+        const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(10000) });
+        if (!ddgRes.ok) return { error: `DuckDuckGo search failed: ${ddgRes.status}` };
+        const ddgData = await ddgRes.json();
+        const results = [];
+        if (ddgData.AbstractText) {
+          results.push({ title: ddgData.Heading || "Abstract", url: ddgData.AbstractURL || "", content: ddgData.AbstractText });
+        }
+        for (const topic of (ddgData.RelatedTopics || []).slice(0, maxRes)) {
+          if (topic.Text) {
+            results.push({ title: topic.FirstURL ? "" : "", url: topic.FirstURL || "", content: topic.Text });
+          }
+        }
+        return { query, provider: "duckduckgo", results: results.slice(0, maxRes) };
       } catch (e) { return { error: e.message }; }
     }
     case "skill": {

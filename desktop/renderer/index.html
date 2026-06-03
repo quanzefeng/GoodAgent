@@ -177,6 +177,17 @@
                 <label class="form-label" data-i18n="api.key">API Key</label>
                 <input type="password" id="settings-key" class="form-input" placeholder="sk-..." />
               </div>
+              <div class="form-row" style="margin-top:12px;">
+                <label class="form-label">联网搜索引擎</label>
+                <select id="settings-search-provider" class="form-select">
+                  <option value="tavily">Tavily（推荐，需 API Key）</option>
+                  <option value="duckduckgo">DuckDuckGo（免费，仅英文）</option>
+                </select>
+              </div>
+              <div class="form-row" id="tavily-key-row">
+                <label class="form-label">Tavily API Key</label>
+                <input type="text" id="settings-tavily-key" class="form-input" placeholder="tvly-..." />
+              </div>
               <div id="settings-status" class="settings-status hidden"></div>
               <button id="settings-save-btn" class="btn primary" style="width:100%;margin-top:8px;" data-i18n="common.save">保存</button>
             </div>

@@ -125,4 +125,5 @@ contextBridge.exposeInMainWorld("goodAgent", {
   saveApiKey: (provider, key) => ipcRenderer.invoke("api-key:save", { provider, key }),
   loadApiKey: (provider) => ipcRenderer.invoke("api-key:load", { provider }),
   deleteApiKey: (provider) => ipcRenderer.invoke("api-key:delete", { provider }),
+  getEnvVar: (name) => ipcRenderer.invoke("env:get", name),
 });

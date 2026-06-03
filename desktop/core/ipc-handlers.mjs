@@ -530,6 +530,10 @@ export function registerIpcHandlers() {
     return store[provider] || null;
   });
 
+  ipcMain.handle("env:get", (_event, name) => {
+    return process.env[name] || null;
+  });
+
   ipcMain.handle("api-key:delete", (_event, { provider }) => {
     if (!provider) return { error: "provider required" };
     const store = loadKeyStore();
