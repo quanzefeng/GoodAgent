@@ -1,4 +1,0 @@
-[     741ms] [WARNING] Deprecated API for given entry type. @ https://s1.hdslb.com/bfs/static/shanks/laputa-home/assets/index-646c549f.js:47
-[     872ms] [INFO] %c bili-fe-mirror %c v2.1.0  padding: 2px 6px; border-radius: 3px 0 0 3px; color: #fff; background: #FF6699; font-weight: bold; padding: 2px 6px; border-radius: 0 3px 3px 0; color: #fff; background: #FF9999; font-weight: bold; @ https://s1.hdslb.com/bfs/seed/jinkela/short/b-mirror/biliMirror.umd.mini.js:1
-[     894ms] [LOG] 白屏检测是否正常 {status: ok, loop: 0, data: Object} @ https://www.bilibili.com/:159
-[   15892ms] [WARNING] Deprecated API for given entry type. @ https://s1.hdslb.com/bfs/seed/jinkela/short/b-mirror/biliMirror.umd.mini.js:1

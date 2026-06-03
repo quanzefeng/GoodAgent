@@ -33,7 +33,6 @@
     "files": [
       "*.mjs",
       "preload.cjs",
-      "preload.js",
       "renderer/**",
       "core/**"
     ],

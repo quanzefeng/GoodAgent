@@ -2,3 +2,5 @@ node_modules/
 dist/
 desktop/release/
 desktop/models/
+*.log
+*.txt
