@@ -111,7 +111,8 @@ Built-in 8 provider presets with one-click switching. Supports both OpenAI-compa
 
 - **混合搜索**：FTS5 关键词全文搜索 + 向量语义搜索
 - **RRF 融合**：自动合并两种搜索结果，取最相关的内容
-- **向量模型**：内置 MiniLM-L6（离线可用，打包进应用），也支持 Ollama 自定义模型
+- **向量模型**：内置 MiniLM-L6（384维，离线可用），支持 Ollama 自定义模型
+- **MRL 无损压缩**：自动检测模型是否支持 Matryoshka 嵌入（如 qwen3-embedding），原生 1024 维无损压缩到 384 维
 - **智能截断**：自动检测 Ollama 模型上下文长度，按模型能力截断嵌入文本
 - **即时注入**：相关笔记自动注入到对话 system prompt 中
 
@@ -275,6 +276,26 @@ Built-in 8 provider presets with one-click switching. Supports both OpenAI-compa
 
 ---
 
+### Prompt Caching / 提示缓存
+
+**中文**：自动利用 LLM 前缀缓存机制，显著降低 API 费用和延迟。
+
+- **系统提示词稳定化**：动态内容（记忆、知识库、任务列表）从系统提示词移至用户消息，系统提示词全程不变 → 缓存命中
+- **懒加载知识库**：仅在首轮对话时注入知识库结果，后续轮次不再重复搜索（Agent 可用 `kb_search` 工具主动查询）
+- **Anthropic 显式缓存**：system prompt + tools + 历史消息打 `cache_control` 标记，TTL 1 小时
+- **DeepSeek 自动缓存**：消息顺序优化（历史在前，动态上下文在后），前缀全部可缓存
+- **实时命中率显示**：每次回复末尾显示 `💾 90% 命中缓存`，三色编码（绿≥80% / 黄≥50% / 红<50%）
+
+**English**: Automatically leverages LLM prefix caching to reduce API costs and latency.
+
+- **Stable System Prompt**: Dynamic content (memory, KB, tasks) moved to user messages; system prompt never changes → always cached
+- **Lazy KB Loading**: KB results injected only on first turn; subsequent turns skip injection (agent can call `kb_search` manually)
+- **Anthropic Explicit Cache**: `cache_control` markers on system, tools, and history; 1-hour TTL
+- **DeepSeek Auto-Cache**: Message ordering optimized (history first, dynamic context last) for maximum prefix match
+- **Live Cache Display**: `💾 90% cached` shown after each reply with color coding (green≥80% / yellow≥50% / red<50%)
+
+---
+
 ### 微信机器人 / WeChat Bot
 
 **中文**：扫码登录微信，通过微信给 Agent 发消息，Agent 自动回复（使用完整对话能力）。
@@ -307,19 +328,40 @@ Built-in 8 provider presets with one-click switching. Supports both OpenAI-compa
 
 ---
 
+## 下载 / Download
+
+预编译安装包，无需安装 Node.js 即可使用。  
+Pre-built binaries — no Node.js required.
+
+| 平台 / Platform | 下载 / Download |
+|------|------|
+| Windows (.exe) | [GitHub Releases](https://github.com/quanzefeng/GoodAgent/releases) |
+| macOS (.dmg) | [GitHub Releases](https://github.com/quanzefeng/GoodAgent/releases) |
+| Linux (.deb / .AppImage) | [GitHub Releases](https://github.com/quanzefeng/GoodAgent/releases) |
+
+---
+
 ## 快速开始 / Quick Start
 
-### 安装运行 / Install & Run
+### 源码运行 / Run from Source
 
 ```bash
 git clone https://github.com/quanzefeng/GoodAgent.git
 cd GoodAgent/desktop
-npm install
+npm install        # postinstall 自动下载 MiniLM-L6 模型（~23MB）
 npm start
 ```
 
-首次运行会自动下载内嵌模型 MiniLM-L6（~23MB），之后完全离线可用。  
-On first run, the bundled MiniLM-L6 model (~23MB) is downloaded automatically. Fully offline thereafter.
+### 开发构建 / Development Build
+
+```bash
+npm run dist:win     # 打包 Windows .exe
+npm run dist:mac     # 打包 macOS .dmg
+npm run dist:linux   # 打包 Linux .deb + .AppImage
+```
+
+CI 构建通过 GitHub Actions 手动触发，产物自动发布到 [Releases](https://github.com/quanzefeng/GoodAgent/releases)。  
+CI builds are triggered manually via GitHub Actions and auto-published to [Releases](https://github.com/quanzefeng/GoodAgent/releases).
 
 ### 配置 API / Configure API
 
@@ -362,7 +404,7 @@ desktop/
     tool-executor.mjs      # 28 工具调度 + 跨平台 Shell / Tool dispatch + cross-platform shell
     tool-definitions.mjs   # 工具定义 / Tool definitions
     system-prompt.mjs      # 系统提示词构建 + AGENTS.md 加载 / Prompt builder + AGENTS.md loading
-    format-adapters.mjs    # OpenAI / Anthropic API 适配器 / API format adapters
+    format-adapters.mjs    # OpenAI / Anthropic API 适配器 + Prompt Caching / API format adapters
     token-budget.mjs       # Token 估算 + 上下文压缩 + 摘要继续 / Token estimation + context compression
     hook-manager.mjs       # Hook 系统 / Hook system
     sub-agent.mjs          # 子代理 / Sub-agent
@@ -387,7 +429,21 @@ desktop/
   test/                    # Vitest 测试 / Tests
   models/                  # 内嵌模型 / Bundled models (MiniLM-L6)
   scripts/                 # 构建脚本 / Build scripts
+.github/workflows/         # CI 构建 / CI build (Windows/macOS/Linux)
 ```
+
+---
+
+## 赞赏支持 / Sponsor
+
+如果 GoodAgent 帮到了你，欢迎请作者喝杯咖啡 ☕  
+If GoodAgent helps you, consider buying the author a coffee ☕
+
+<div align="center">
+  <img src="assets/alipay-qr.jpg" width="200" alt="支付宝" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/wechat-qr.jpg" width="200" alt="微信" />
+</div>
 
 ---
 
