@@ -3,12 +3,6 @@ import { existsSync, mkdirSync, createWriteStream } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Skip download on CI (model is bundled via extraResources in electron-builder)
-if (process.env.CI) {
-  console.log("CI detected — skipping model download (bundled at build time)");
-  process.exit(0);
-}
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MODELS_DIR = join(__dirname, "..", "models", "all-MiniLM-L6-v2");
 
