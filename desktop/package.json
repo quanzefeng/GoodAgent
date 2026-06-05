@@ -31,6 +31,10 @@
     "appId": "com.aideagent.desktop",
     "productName": "AideAgent",
     "asar": true,
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/sharp/**"
+    ],
     "files": [
       "*.mjs",
       "preload.cjs",

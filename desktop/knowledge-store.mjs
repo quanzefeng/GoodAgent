@@ -274,6 +274,16 @@ function getLocalModelPath() {
 let _embedder = null;
 let _embedderReady = false;
 
+// Dynamic import with timeout — prevents hanging if native modules can't load
+// (e.g. onnxruntime-node inside an Electron asar archive)
+async function importWithTimeout(moduleSpecifier, timeoutMs = 15000) {
+  const result = await Promise.race([
+    import(moduleSpecifier),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`Import timed out after ${timeoutMs}ms`)), timeoutMs)),
+  ]);
+  return result;
+}
+
 async function getEmbedder() {
   if (_embedderReady) return _embedder;
 
@@ -285,7 +295,7 @@ async function getEmbedder() {
   for (const p of providers) {
     if (p === "local") {
       try {
-        const { pipeline } = await import("@huggingface/transformers");
+        const { pipeline } = await importWithTimeout("@huggingface/transformers", 15000);
         const localPath = getLocalModelPath();
         _embedder = localPath
           ? await pipeline("feature-extraction", localPath, { local_files_only: true })
