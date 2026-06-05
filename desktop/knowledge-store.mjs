@@ -289,12 +289,28 @@ async function getEmbedder() {
 
   const provider = _config.embeddingProvider || "local";
 
-  // Try configured provider first, then auto-detect fallbacks
-  const providers = [provider, "ollama", "local"].filter((v, i, a) => a.indexOf(v) === i);
+  // Build provider try-order: configured provider first, then fallbacks
+  // IMPORTANT: If user explicitly chose "ollama", do NOT fall back to "local"
+  // (local can hang in packaged asar builds due to onnxruntime-node native module loading)
+  const providers = provider === "ollama"
+    ? ["ollama"]
+    : [provider, "ollama", "local"].filter((v, i, a) => a.indexOf(v) === i);
 
   for (const p of providers) {
     if (p === "local") {
       try {
+        // [PACKAGING-FIX] Force Node.js backend in @huggingface/transformers
+        // In Electron, process.release.name === "electron" (not "node"), which
+        // makes the library use its WASM/WebGPU backend instead of the native
+        // onnxruntime-node backend. The WASM backend tries to fetch WASM binaries
+        // from CDN (jsdelivr), which hangs indefinitely in offline/restricted
+        // environments like the packaged .exe. We patch release.name to force
+        // the correct Node.js backend detection.
+        const isElectron = process.release?.name === "electron";
+        if (isElectron) {
+          try { process.release.name = "node"; } catch {}
+        }
+
         const { pipeline } = await importWithTimeout("@huggingface/transformers", 15000);
         const localPath = getLocalModelPath();
         _embedder = localPath
@@ -305,6 +321,11 @@ async function getEmbedder() {
         return _embedder;
       } catch (e) {
         console.log("[kb] Local embedder unavailable:", e.message);
+      } finally {
+        // Restore original release name to avoid side effects
+        if (isElectron) {
+          try { process.release.name = "electron"; } catch {}
+        }
       }
     }
 
