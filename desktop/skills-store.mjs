@@ -1,7 +1,7 @@
 /**
- * GoodAgent Skills Store — L3 Skill Memory
+ * AideAgent Skills Store — L3 Skill Memory
  * 
- * Skills are markdown files in ~/.goodagent/skills/ with YAML frontmatter.
+ * Skills are markdown files in ~/.aideagent/skills/ with YAML frontmatter.
  * Format follows Hermes/agentskills.io convention.
  */
 
@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync
 import { DatabaseSync } from "node:sqlite";
 
 const HOME = homedir();
-const SKILLS_DIR = join(HOME, ".goodagent", "skills");
+const SKILLS_DIR = join(HOME, ".aideagent", "skills");
 const ARCHIVE_DIR = join(SKILLS_DIR, "_archive");
 const CURATOR_PATH = join(SKILLS_DIR, "_curator.json");
 const SKILLS_DB_PATH = join(SKILLS_DIR, "skills.db");

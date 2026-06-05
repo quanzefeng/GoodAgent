@@ -1,11 +1,11 @@
 /**
- * GoodAgent Knowledge Store — Hybrid RAG (FTS5 + Vector Embeddings)
+ * AideAgent Knowledge Store — Hybrid RAG (FTS5 + Vector Embeddings)
  *
  * Provides Obsidian vault indexing, full-text search, vector embeddings,
  * and hybrid search via Reciprocal Rank Fusion (RRF).
  *
- * DB: ~/.goodagent/knowledge.db
- * Config: ~/.goodagent/kb-config.json
+ * DB: ~/.aideagent/knowledge.db
+ * Config: ~/.aideagent/kb-config.json
  */
 
 import { join, relative, extname, basename, dirname } from "path";
@@ -17,7 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const HOME = homedir();
-const DATA_DIR = join(HOME, ".goodagent");
+const DATA_DIR = join(HOME, ".aideagent");
 const DB_PATH = join(DATA_DIR, "knowledge.db");
 const CONFIG_PATH = join(DATA_DIR, "kb-config.json");
 let _embeddingDim = 384; // Auto-detected at runtime from the actual embedding model

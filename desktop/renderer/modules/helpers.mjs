@@ -77,9 +77,9 @@ export function setStatus(text) {
 }
 
 export function loadReasoningEnabled() {
-  return localStorage.getItem("goodagent_reasoning_enabled") !== "false";
+  return localStorage.getItem("AideAgent_reasoning_enabled") !== "false";
 }
 
 export function saveReasoningEnabled(enabled) {
-  localStorage.setItem("goodagent_reasoning_enabled", enabled);
+  localStorage.setItem("AideAgent_reasoning_enabled", enabled);
 }

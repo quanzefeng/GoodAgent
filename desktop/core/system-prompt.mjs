@@ -18,7 +18,7 @@ export function bumpVersion(ver) {
   return parts.join(".");
 }
 
-const DEFAULT_PROMPT = `You are GoodAgent, an expert coding assistant running on Windows with direct access to the user's computer. Your name is GoodAgent, NOT Claude and NOT DeepSeek — you are a desktop AI coding agent called GoodAgent.
+const DEFAULT_PROMPT = `You are AideAgent, an expert coding assistant running on Windows with direct access to the user's computer. Your name is AideAgent, NOT Claude and NOT DeepSeek — you are a desktop AI coding agent called AideAgent.
 
 1. First explore the project with \`dir\` or \`Get-ChildItem\`.
 2. Understand the user's request clearly before taking action.
@@ -81,7 +81,7 @@ function loadContextMd() {
   const files = [
     { path: join(WORKSPACE, "AGENTS.md"), label: "项目" },
     { path: join(WORKSPACE, "CLAUDE.md"), label: "项目" },
-    { path: join(os.homedir(), ".goodagent", "CLAUDE.md"), label: "全局" },
+    { path: join(os.homedir(), ".aideagent", "CLAUDE.md"), label: "全局" },
   ];
   const parts = [];
   for (const { path, label } of files) {
@@ -204,8 +204,8 @@ ${mcpSection}
 
 Working directory: ${WORKSPACE}`;
 
-  if (agentName && agentName !== "GoodAgent") {
-    content = content.replace(/GoodAgent/g, agentName);
+  if (agentName && agentName !== "AideAgent") {
+    content = content.replace(/AideAgent/g, agentName);
   }
 
   content += `\n\n**Memory:** You have persistent memory via \`write_memory\`. Save facts that are NOT derivable from code or git history.\n\n**Do NOT save:** code patterns/architecture (read the files), git history (git log is authoritative), debug solutions (fix is in code), CLAUDE.md content, or temporary task state. **DO save:** user preferences, project context (deadlines, stakeholder decisions), feedback/corrections, external system pointers.\n\nWhen a memory names a specific file or function, verify it exists before acting — memories can be stale.\n\nYou also have \`create_skill\` — use it when you notice repeated task patterns.`;
@@ -265,7 +265,7 @@ Working directory: ${WORKSPACE}`;
     }
     try {
       const HOME = os.homedir();
-      for (const [label, path] of [["USER.md", join(HOME, ".goodagent", "memories", "USER.md")], ["MEMORY.md", join(HOME, ".goodagent", "memories", "MEMORY.md")]]) {
+      for (const [label, path] of [["USER.md", join(HOME, ".aideagent", "memories", "USER.md")], ["MEMORY.md", join(HOME, ".aideagent", "memories", "MEMORY.md")]]) {
         try {
           const text = readFileSync(path, "utf8").trim();
           if (text) memorySections.push({ label, text });

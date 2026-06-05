@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join } from "path";
 import { homedir } from "os";
 
-const db = new DatabaseSync(join(homedir(), ".goodagent", "sessions.db"));
+const db = new DatabaseSync(join(homedir(), ".aideagent", "sessions.db"));
 const mockDb = {
   listSessions: (n) => db.prepare("SELECT id, title FROM sessions ORDER BY updated_at DESC LIMIT ?").all(n),
   loadSession: (id) => {

@@ -34,7 +34,7 @@ export function initHookManager(workspace) {
   if (_workspace) {
     config = mergeConfigs(config, loadConfig(_workspace));
   }
-  config = mergeConfigs(config, loadConfig(join(homedir(), ".goodagent")));
+  config = mergeConfigs(config, loadConfig(join(homedir(), ".aideagent")));
   _cache = Object.keys(config).length > 0 ? config : null;
 }
 

@@ -1,4 +1,4 @@
-name: Build GoodAgent Desktop
+name: Build AideAgent Desktop
 
 on:
   workflow_dispatch:
@@ -24,9 +24,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GoodAgent-Windows
+          name: AideAgent-Windows
           path: |
-            desktop/release/GoodAgent-*-Windows-*.exe
+            desktop/release/AideAgent-*-Windows-*.exe
             desktop/release/latest.yml
           if-no-files-found: error
 
@@ -50,9 +50,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GoodAgent-macOS
+          name: AideAgent-macOS
           path: |
-            desktop/release/GoodAgent-*-macOS-*.dmg
+            desktop/release/AideAgent-*-macOS-*.dmg
             desktop/release/latest-mac.yml
           if-no-files-found: error
 
@@ -78,10 +78,10 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GoodAgent-Linux
+          name: AideAgent-Linux
           path: |
-            desktop/release/GoodAgent-*-Linux-*.deb
-            desktop/release/GoodAgent-*-Linux-*.AppImage
+            desktop/release/AideAgent-*-Linux-*.deb
+            desktop/release/AideAgent-*-Linux-*.AppImage
             desktop/release/latest-linux.yml
           if-no-files-found: error
 
@@ -105,7 +105,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
-          name: GoodAgent Desktop v${{ steps.version.outputs.VERSION }}
+          name: AideAgent Desktop v${{ steps.version.outputs.VERSION }}
           files: release-artifacts/**/*
           draft: false
           generate_release_notes: true

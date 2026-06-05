@@ -1,4 +1,4 @@
-const FONT_KEY = "goodagent_font";
+const FONT_KEY = "AideAgent_font";
 
 export function applyChatFont(fontValue) {
   document.documentElement.style.setProperty("--chat-font", fontValue);

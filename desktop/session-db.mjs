@@ -1,10 +1,10 @@
 /**
- * GoodAgent Session Database — SQLite + FTS5
+ * AideAgent Session Database — SQLite + FTS5
  * 
  * Replaces the old JSON-file session store with a persistent,
  * searchable SQLite database. Auto-migrates existing JSON files.
  * 
- * DB: ~/.goodagent/sessions.db
+ * DB: ~/.aideagent/sessions.db
  */
 
 import { DatabaseSync } from "node:sqlite";
@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync 
 import { randomUUID } from "node:crypto";
 
 const HOME = homedir();
-const DATA_DIR = join(HOME, ".goodagent");
+const DATA_DIR = join(HOME, ".aideagent");
 const DB_PATH = join(DATA_DIR, "sessions.db");
 
 /** Insert spaces between CJK and ASCII for FTS5 tokenization */

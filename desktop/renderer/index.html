@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data: blob:; connect-src https: http: ws: wss:" />
-  <title>GoodAgent</title>
+  <title>AideAgent</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" />
   <link rel="stylesheet" href="style.css" />
@@ -69,7 +69,7 @@
         <h2 style="font-size:16px;font-weight:600;color:var(--text-primary);" data-i18n="workspace.first_pick.title">📁 选择工作区间</h2>
       </div>
       <div class="modal-body">
-        <p data-i18n="workspace.first_pick.desc" style="font-size:14px;line-height:1.6;color:var(--text-primary);margin:0 0 12px;">请选择你的项目目录。GoodAgent 会以此目录为根运行所有文件操作、命令与 LSP 服务。</p>
+        <p data-i18n="workspace.first_pick.desc" style="font-size:14px;line-height:1.6;color:var(--text-primary);margin:0 0 12px;">请选择你的项目目录。AideAgent 会以此目录为根运行所有文件操作、命令与 LSP 服务。</p>
         <div id="workspace-first-pick-current" style="background:var(--bg-tertiary);padding:10px;border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);border:1px solid var(--border);word-break:break-all;margin-bottom:16px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button id="workspace-first-pick-skip" class="btn" data-i18n="workspace.first_pick.skip">稍后</button>
@@ -209,7 +209,7 @@
             <div class="agent-name-settings">
               <label class="agent-name-label" data-i18n="avatar.agent_name">Agent 名称</label>
               <div class="agent-name-row">
-                <input type="text" id="agent-name-input" class="form-input" value="GoodAgent" maxlength="30" />
+                <input type="text" id="agent-name-input" class="form-input" value="AideAgent" maxlength="30" />
                 <button id="save-agent-name-btn" class="btn primary" data-i18n="common.save">保存</button>
               </div>
               <p class="hint" data-i18n="avatar.name_hint">修改后在侧边栏、对话标签、页面标题等所有位置生效</p>
@@ -556,8 +556,8 @@
           <!-- 关于 Panel -->
           <div class="settings-panel" id="panel-about">
             <div style="text-align:center;padding:24px 0 16px;">
-              <img src="avatar.jpg" alt="GoodAgent" style="width:64px;height:64px;border-radius:16px;margin-bottom:12px;" />
-              <h2 style="font-size:20px;font-weight:700;color:var(--text-primary);margin:0 0 4px;">GoodAgent</h2>
+              <img src="avatar.jpg" alt="AideAgent" style="width:64px;height:64px;border-radius:16px;margin-bottom:12px;" />
+              <h2 style="font-size:20px;font-weight:700;color:var(--text-primary);margin:0 0 4px;">AideAgent</h2>
               <p id="about-version" style="font-size:13px;color:var(--text-light);margin:0;"></p>
             </div>
 
@@ -601,7 +601,7 @@
                 <p style="margin:0;">微信：q2993919594</p>
                 <p style="margin:0;">谷歌邮箱：zefengquan5@gmail.com</p>
                 <p style="margin:0;">
-                  GitHub：<a href="https://github.com/quanzefeng/GoodAgent" style="color:var(--primary);text-decoration:none;" target="_blank">github.com/quanzefeng/GoodAgent</a>
+                  GitHub：<a href="https://github.com/quanzefeng/AideAgent" style="color:var(--primary);text-decoration:none;" target="_blank">github.com/quanzefeng/AideAgent</a>
                 </p>
               </div>
             </div>
@@ -636,7 +636,7 @@
       <div class="sidebar-header">
         <div class="logo small">
           <img id="sidebar-avatar" class="avatar avatar-sidebar" src="avatar.jpg" alt="avatar" />
-          <span class="brand" id="sidebar-brand">GoodAgent</span>
+          <span class="brand" id="sidebar-brand">AideAgent</span>
         </div>
       </div>
           <div id="workspace-bar" class="workspace-bar" data-i18n-title="sidebar.switch_workspace" title="点击切换工作区间">
@@ -669,10 +669,10 @@
       <div id="message-list">
         <div class="welcome">
           <div class="welcome-icon">
-            <img id="welcome-avatar" class="avatar avatar-welcome" src="avatar.jpg" alt="GoodAgent" />
+            <img id="welcome-avatar" class="avatar avatar-welcome" src="avatar.jpg" alt="AideAgent" />
           </div>
-          <h1 data-i18n="chat.welcome_title">GoodAgent</h1>
-          <p class="description">任何事都可以找 GoodAgent</p>
+          <h1 data-i18n="chat.welcome_title">AideAgent</h1>
+          <p class="description">任何事都可以找 AideAgent</p>
         </div>
       </div>
 
@@ -687,7 +687,7 @@
             </button>
             <textarea
               id="prompt-input"
-              placeholder="向 GoodAgent 提问..."
+              placeholder="向 AideAgent 提问..."
               rows="1"
             ></textarea>
             <div id="input-actions">

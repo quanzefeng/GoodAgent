@@ -21,7 +21,7 @@ export async function loadMemoryPanel() {
 
   async function refreshList(filter = "") {
     try {
-      _memoryListCache = await window.goodAgent.memoryListAll();
+      _memoryListCache = await window.aideagent.memoryListAll();
     } catch {
       _memoryListCache = [];
     }
@@ -48,7 +48,7 @@ export async function loadMemoryPanel() {
   async function selectMemory(filename) {
     _memoryCurrentFile = filename;
     try {
-      const m = await window.goodAgent.memoryReadOne(filename);
+      const m = await window.aideagent.memoryReadOne(filename);
       if (m) {
         nameInput.value = m.name || "";
         descInput.value = m.description || "";
@@ -80,9 +80,9 @@ export async function loadMemoryPanel() {
     statusEl.textContent = t("memory.saving");
     try {
       if (_memoryCurrentFile) {
-        await window.goodAgent.memoryUpdate(_memoryCurrentFile, body, name, desc, type);
+        await window.aideagent.memoryUpdate(_memoryCurrentFile, body, name, desc, type);
       } else {
-        await window.goodAgent.memoryCreate(name, desc, type, body);
+        await window.aideagent.memoryCreate(name, desc, type, body);
       }
       statusEl.textContent = t("memory.saved");
       setTimeout(() => { statusEl.textContent = ""; }, 2000);
@@ -101,7 +101,7 @@ export async function loadMemoryPanel() {
     if (!_memoryCurrentFile) return;
     if (!confirm(t("memory.delete_confirm").replace("{name}", _memoryCurrentFile))) return;
     try {
-      await window.goodAgent.memoryDelete(_memoryCurrentFile);
+      await window.aideagent.memoryDelete(_memoryCurrentFile);
       _memoryCurrentFile = null;
       nameInput.value = ""; descInput.value = ""; bodyTextarea.value = "";
       statusEl.textContent = t("memory.deleted");

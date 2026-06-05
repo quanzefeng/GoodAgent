@@ -1,5 +1,5 @@
 /**
- * GoodAgent LSP Manager — lightweight LSP client over JSON-RPC stdio
+ * AideAgent LSP Manager — lightweight LSP client over JSON-RPC stdio
  * Supports: goToDefinition, findReferences, hover, documentSymbol
  * Language servers: auto-detected by file extension
  */

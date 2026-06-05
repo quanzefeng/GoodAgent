@@ -1,9 +1,9 @@
-const AGENT_NAME_KEY = "goodagent_name";
-const USER_NAME_KEY = "goodagent_user_name";
-const USER_AVATAR_KEY = "goodagent_user_avatar";
+const AGENT_NAME_KEY = "AideAgent_name";
+const USER_NAME_KEY = "AideAgent_user_name";
+const USER_AVATAR_KEY = "AideAgent_user_avatar";
 
 export function loadAgentName() {
-  return localStorage.getItem(AGENT_NAME_KEY) || "GoodAgent";
+  return localStorage.getItem(AGENT_NAME_KEY) || "AideAgent";
 }
 
 export function saveAgentName(name) {

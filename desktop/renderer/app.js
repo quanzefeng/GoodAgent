@@ -23,12 +23,12 @@ marked.setOptions({
 
 /* ── Constants ────────────────────────────────────────── */
 const STORAGE_KEYS = {
-  PROVIDER: "goodagent_provider",
-  API_URL: "goodagent_api_url",
-  MODEL: "goodagent_model",
-  API_KEY: "goodagent_api_key",
-  API_FORMAT: "goodagent_api_format",
-  REASONING_ENABLED: "goodagent_reasoning_enabled",
+  PROVIDER: "AideAgent_provider",
+  API_URL: "AideAgent_api_url",
+  MODEL: "AideAgent_model",
+  API_KEY: "AideAgent_api_key",
+  API_FORMAT: "AideAgent_api_format",
+  REASONING_ENABLED: "AideAgent_reasoning_enabled",
 };
 
 const PROVIDER_PRESETS = {
@@ -105,10 +105,10 @@ const welcomeAvatar = $("#welcome-avatar");
 const uploadBtn = $("#upload-btn");
 const fileInput = $("#file-input");
 const filePreviewArea = $("#file-preview-area");
-const AVATAR_KEY = "goodagent_avatar";
-const USER_AVATAR_KEY = "goodagent_user_avatar";
-const FONT_KEY = "goodagent_font";
-const USER_NAME_KEY = "goodagent_user_name";
+const AVATAR_KEY = "AideAgent_avatar";
+const USER_AVATAR_KEY = "AideAgent_user_avatar";
+const FONT_KEY = "AideAgent_font";
+const USER_NAME_KEY = "AideAgent_user_name";
 
 /* ── Helpers (imported from modules/helpers.mjs) ── */
 
@@ -221,10 +221,10 @@ if (reasoningCheckbox) {
   });
   // Plan mode toggle
   planModeCheckbox.addEventListener("change", () => {
-    window.goodAgent.setPlanMode(planModeCheckbox.checked);
+    window.aideagent.setPlanMode(planModeCheckbox.checked);
   });
   // Load initial plan mode state
-  window.goodAgent.getPlanMode().then(r => { planModeCheckbox.checked = r.planMode; }).catch(() => {});
+  window.aideagent.getPlanMode().then(r => { planModeCheckbox.checked = r.planMode; }).catch(() => {});
 }
 
 /* ── Message DOM ──────────────────────────────────────── */
@@ -449,7 +449,7 @@ function finishAssistantMessage(msgEl) {
         btn.disabled = true;
         const orig = btn.innerHTML;
         btn.innerHTML = t("misc.saving");
-        const result = await window.goodAgent.downloadMarkdown(text);
+        const result = await window.aideagent.downloadMarkdown(text);
         if (result.success) {
           btn.innerHTML = `<span style="color:#22c55e">${t("misc.saved")}</span>`;
           setTimeout(() => { btn.innerHTML = orig; }, 2000);
@@ -526,16 +526,16 @@ async function initApiKeys() {
   const provider = localStorage.getItem(STORAGE_KEYS.PROVIDER) || "";
   if (provider) {
     try {
-      const key = await window.goodAgent.loadApiKey(provider);
+      const key = await window.aideagent.loadApiKey(provider);
       if (key) {
         _apiKeyCache[provider] = key;
       } else {
         // Migrate old plaintext key from localStorage
-        const legacyKey = localStorage.getItem(provider ? `goodagent_api_key_${provider}` : "goodagent_api_key") || "";
+        const legacyKey = localStorage.getItem(provider ? `AideAgent_api_key_${provider}` : "AideAgent_api_key") || "";
         if (legacyKey) {
           _apiKeyCache[provider] = legacyKey;
-          await window.goodAgent.saveApiKey(provider, legacyKey);
-          localStorage.removeItem(provider ? `goodagent_api_key_${provider}` : "goodagent_api_key");
+          await window.aideagent.saveApiKey(provider, legacyKey);
+          localStorage.removeItem(provider ? `AideAgent_api_key_${provider}` : "AideAgent_api_key");
         }
       }
     } catch { /* ignored */ }
@@ -544,7 +544,7 @@ async function initApiKeys() {
 
 function loadApiConfig() {
   const provider = localStorage.getItem(STORAGE_KEYS.PROVIDER) || "";
-  const prefix = provider ? `goodagent_${provider}_` : "goodagent_";
+  const prefix = provider ? `AideAgent_${provider}_` : "AideAgent_";
   const apiKey = _apiKeyCache[provider] || "";
   return {
     provider,
@@ -556,16 +556,16 @@ function loadApiConfig() {
 }
 
 async function saveApiConfig(provider, apiUrl, model, apiKey, apiFormat) {
-  const prefix = provider ? `goodagent_${provider}_` : "goodagent_";
+  const prefix = provider ? `AideAgent_${provider}_` : "AideAgent_";
   if (apiUrl) localStorage.setItem(`${prefix}api_url`, apiUrl);
   localStorage.setItem(STORAGE_KEYS.PROVIDER, provider);
   if (model) localStorage.setItem(`${prefix}model`, model);
   if (apiFormat) localStorage.setItem(STORAGE_KEYS.API_FORMAT, apiFormat);
   if (apiKey) {
     _apiKeyCache[provider] = apiKey;
-    await window.goodAgent.saveApiKey(provider, apiKey);
+    await window.aideagent.saveApiKey(provider, apiKey);
     // Remove legacy plaintext key
-    localStorage.removeItem(provider ? `goodagent_api_key_${provider}` : "goodagent_api_key");
+    localStorage.removeItem(provider ? `AideAgent_api_key_${provider}` : "AideAgent_api_key");
   }
 }
 
@@ -650,16 +650,16 @@ function fillSettingsForm() {
     if (settingsKey) settingsKey.value = cfg.apiKey;
     // Load search provider + Tavily key
     if (settingsSearchProvider) {
-      const saved = localStorage.getItem("goodagent_search_provider") || "tavily";
+      const saved = localStorage.getItem("AideAgent_search_provider") || "tavily";
       settingsSearchProvider.value = saved;
       if (tavilyKeyRow) tavilyKeyRow.style.display = saved === "tavily" ? "block" : "none";
     }
     if (settingsTavilyKey) {
       // Try encrypted store first, then env var
-      window.goodAgent.loadApiKey("tavily").then(k => {
+      window.aideagent.loadApiKey("tavily").then(k => {
         if (k) { settingsTavilyKey.value = k; return; }
         // Auto-detect from environment
-        window.goodAgent.getEnvVar("TAVILY_API_KEY").then(envKey => {
+        window.aideagent.getEnvVar("TAVILY_API_KEY").then(envKey => {
           if (envKey) settingsTavilyKey.value = envKey;
         }).catch(() => {});
       }).catch(() => {});
@@ -672,7 +672,7 @@ function fillSettingsForm() {
 function onProviderChange() {
   const key = settingsProvider?.value || "";
   const preset = PROVIDER_PRESETS[key];
-  const prefix = key ? `goodagent_${key}_` : "goodagent_";
+  const prefix = key ? `AideAgent_${key}_` : "AideAgent_";
   const savedUrl = localStorage.getItem(`${prefix}api_url`) || "";
   const savedModel = localStorage.getItem(`${prefix}model`) || "";
   if (preset && key) {
@@ -689,7 +689,7 @@ function onProviderChange() {
   if (settingsKey) {
     settingsKey.value = _apiKeyCache[key] || "";
     if (!_apiKeyCache[key] && key) {
-      window.goodAgent.loadApiKey(key).then(k => {
+      window.aideagent.loadApiKey(key).then(k => {
         if (k) { _apiKeyCache[key] = k; settingsKey.value = k; }
       }).catch(() => {});
     }
@@ -740,16 +740,16 @@ async function saveSettingsForm() {
   await saveApiConfig(provider, apiUrl, model, apiKey, apiFormat);
   // Save search provider preference (localStorage for UI + config file for main process)
   if (settingsSearchProvider) {
-    localStorage.setItem("goodagent_search_provider", settingsSearchProvider.value);
-    window.goodAgent.saveApiKey("_search_provider", settingsSearchProvider.value).catch(() => {});
+    localStorage.setItem("AideAgent_search_provider", settingsSearchProvider.value);
+    window.aideagent.saveApiKey("_search_provider", settingsSearchProvider.value).catch(() => {});
   }
   // Save Tavily key if provided
   const tavilyKey = (settingsTavilyKey?.value || "").trim();
   if (tavilyKey) {
-    await window.goodAgent.saveApiKey("tavily", tavilyKey);
+    await window.aideagent.saveApiKey("tavily", tavilyKey);
   }
   // Sync to WeChat bot config so WeChat uses updated API
-  window.goodAgent.syncApiToWechat?.({ apiUrl, apiKey, model, apiFormat }).catch(() => {});
+  window.aideagent.syncApiToWechat?.({ apiUrl, apiKey, model, apiFormat }).catch(() => {});
   updateConfigBanner();
   updateInfoBar();
   if (settingsStatus) {
@@ -951,14 +951,14 @@ async function submitQuery() {
     const agentName = loadAgentName();
     const kbEnabled = document.getElementById("kb-toggle")?.checked || false;
     const webSearchEnabled = document.getElementById("web-search-toggle")?.checked ?? true;
-    await window.goodAgent.submitQuery(text, cfg.apiKey, cfg.apiUrl, cfg.model, cfg.apiFormat, apiFiles, enabledSkills, reasoning, agentName, kbEnabled, planModeCheckbox.checked, webSearchEnabled);
+    await window.aideagent.submitQuery(text, cfg.apiKey, cfg.apiUrl, cfg.model, cfg.apiFormat, apiFiles, enabledSkills, reasoning, agentName, kbEnabled, planModeCheckbox.checked, webSearchEnabled);
   } catch (err) {
     console.error("Query error:", err);
   }
 }
 
 function abortQuery() {
-  window.goodAgent.abortQuery();
+  window.aideagent.abortQuery();
   if (state.currentAssistantMsg) {
     finishAssistantMessage(state.currentAssistantMsg);
   }
@@ -989,7 +989,7 @@ function resetChat() {
     holdStreamingDom();
     state.isStreaming = false;
     // Reset backend session so next query starts fresh
-    window.goodAgent.resetSession();
+    window.aideagent.resetSession();
     _loadedSessionId = null;
     state.currentAssistantMsg = null;
     _queryQueue.length = 0;
@@ -1007,7 +1007,7 @@ function resetChat() {
     requestAnimationFrame(() => promptInput.focus());
     return;
   }
-  window.goodAgent.resetSession();
+  window.aideagent.resetSession();
   _queryQueue.length = 0;
   state.sessionId = null;
   state.isStreaming = false;
@@ -1069,7 +1069,7 @@ function restoreHeldDom() {
 }
 
 function refreshSessionList() {
-  window.goodAgent.listSessions().then(sessions => {
+  window.aideagent.listSessions().then(sessions => {
     const container = document.getElementById("session-list");
     if (!container) return;
     if (!sessions || sessions.length === 0) {
@@ -1097,7 +1097,7 @@ function refreshSessionList() {
 document.getElementById("session-search-input")?.addEventListener("input", function () {
   const query = this.value.trim();
   if (!query) { refreshSessionList(); return; }
-  window.goodAgent.searchSessions(query, 30).then(results => {
+  window.aideagent.searchSessions(query, 30).then(results => {
     const container = document.getElementById("session-list");
     if (!container) return;
     if (!results?.length) {
@@ -1128,7 +1128,7 @@ function loadChat(sessionId) {
   if (state.isStreaming) {
     holdStreamingDom();
     // Load with readOnly to avoid overwriting backend state
-    window.goodAgent.loadSession(sessionId, { readOnly: true }).then(data => {
+    window.aideagent.loadSession(sessionId, { readOnly: true }).then(data => {
       if (!data) return;
       _loadedSessionId = data.sessionId;
       if (sessionDisplay) sessionDisplay.textContent = data.title || data.sessionId || "—";
@@ -1139,7 +1139,7 @@ function loadChat(sessionId) {
     return;
   }
 
-  window.goodAgent.loadSession(sessionId).then(data => {
+  window.aideagent.loadSession(sessionId).then(data => {
     if (!data) return;
     _loadedSessionId = data.sessionId;
     state.sessionId = data.sessionId;
@@ -1193,7 +1193,7 @@ document.addEventListener("click", async (e) => {
     e.stopPropagation();
     const id = deleteBtn.dataset.sessionId;
     if (id && await showConfirmDialog(t("sidebar.delete_confirm"))) {
-      window.goodAgent.deleteSession(id).then(() => {
+      window.aideagent.deleteSession(id).then(() => {
         if (_loadedSessionId === id) _loadedSessionId = null;
         refreshSessionList();
       });
@@ -1206,7 +1206,7 @@ document.addEventListener("click", async (e) => {
     e.stopPropagation();
     const id = exportBtn.dataset.sessionId;
     if (id) {
-      window.goodAgent.exportSessionMarkdown(id).then(data => {
+      window.aideagent.exportSessionMarkdown(id).then(data => {
         if (data?.markdown) {
           const blob = new Blob([data.markdown], { type: "text/markdown;charset=utf-8" });
           const url = URL.createObjectURL(blob);
@@ -1239,7 +1239,7 @@ document.addEventListener("click", async (e) => {
       if (!newText || newText === oldText) { undoEdit(); return; }
       const msgId = msgEl.dataset.msgId;
       if (msgId) {
-        await window.goodAgent.editMessage(parseInt(msgId), newText);
+        await window.aideagent.editMessage(parseInt(msgId), newText);
       }
       const p = document.createElement("p");
       p.textContent = newText;
@@ -1408,20 +1408,20 @@ function showPermission(evt) {
 }
 
 // Render permission request from main process
-window.goodAgent.onPermissionRequest((data) => {
+window.aideagent.onPermissionRequest((data) => {
   if (state._permResolve) {
     // Already showing a permission dialog - auto-deny new one
-    window.goodAgent.respondPermission(data.id, false);
+    window.aideagent.respondPermission(data.id, false);
     return;
   }
   showPermission(data).then((allow) => {
-    window.goodAgent.respondPermission(data.id, allow);
+    window.aideagent.respondPermission(data.id, allow);
     state._permResolve = null;
   });
 });
 
 // Render question from AskUserQuestion tool
-window.goodAgent.onAskQuestion((data) => {
+window.aideagent.onAskQuestion((data) => {
   if (_askResolve) {
     // Already showing a question dialog — auto-close old one
     _askResolve({});
@@ -1429,15 +1429,15 @@ window.goodAgent.onAskQuestion((data) => {
     askModal.classList.remove("active");
   }
   showAskQuestion(data).then((answers) => {
-    window.goodAgent.respondQuestion(data.id, answers);
+    window.aideagent.respondQuestion(data.id, answers);
   });
 });
 
 /* ── Safe event listener registration ──────────────── */
 function onIpc(name, handler) {
-  const fn = window.goodAgent[name];
+  const fn = window.aideagent[name];
   if (typeof fn === "function") fn(handler);
-  else console.warn("[app] goodAgent." + name + " not available");
+  else console.warn("[app] AideAgent." + name + " not available");
 }
 
 /* ── IPC event handlers ──────────────────────────────── */
@@ -1547,11 +1547,11 @@ function setupIPC() {
     addErrorMessage(data.message || t("misc.unknown_error"));
   });
 
-  window.goodAgent.onToolStart((data) => {
+  window.aideagent.onToolStart((data) => {
     addToolCall(data.name, data.args);
   });
 
-  window.goodAgent.onToolResult((data) => {
+  window.aideagent.onToolResult((data) => {
     completeToolCall(data.name, data.result);
     // Update task indicator for task management tools
     if (data.name === "TaskCreate" && data.result?.task) {
@@ -1565,7 +1565,7 @@ function setupIPC() {
 
   // Sub-agent progress: show turn status in thinking section
   try {
-    window.goodAgent.onSubagentProgress?.((data) => {
+    window.aideagent.onSubagentProgress?.((data) => {
       if (data.done) return;
       // Find the running Agent tool entry and update its status
       const thinkingContent = state.currentAssistantMsg?.querySelector?.(".thinking-content");
@@ -1585,14 +1585,14 @@ function setupIPC() {
   } catch (e) { /* preload may not be updated yet */ }
 
   try {
-    window.goodAgent.onTaskClear?.(() => {
+    window.aideagent.onTaskClear?.(() => {
       _taskCache.clear();
       _todoCache.length = 0;
       updateTaskIndicator(null, null, null, []);
     });
   } catch (e) { /* preload may not be updated yet */ }
 
-  window.goodAgent.onSessionUpdate((data) => {
+  window.aideagent.onSessionUpdate((data) => {
     state.sessionId = data.sessionId;
     if (sessionDisplay) {
   if (sessionDisplay) sessionDisplay.textContent = data.sessionId || "—";
@@ -1605,7 +1605,7 @@ function setupIPC() {
     refreshSessionList();
   });
 
-  window.goodAgent.onL0Budget((data) => {
+  window.aideagent.onL0Budget((data) => {
     const el = document.getElementById("token-budget");
     if (!el) return;
     el.classList.remove("hidden");
@@ -1632,7 +1632,7 @@ function setupIPC() {
 
   // Context usage indicator
   try {
-    window.goodAgent.onContextUsage?.((data) => {
+    window.aideagent.onContextUsage?.((data) => {
       const el = document.getElementById("context-usage");
       if (!el) return;
       el.classList.remove("hidden", "ok", "warn", "danger");
@@ -1811,7 +1811,7 @@ async function loadMcpServers() {
   const listEl = document.getElementById("mcp-server-list");
   if (!listEl) return;
   try {
-    const servers = await window.goodAgent.mcpList();
+    const servers = await window.aideagent.mcpList();
     if (!servers || servers.length === 0) {
       listEl.innerHTML = '<p class="hint" style="padding:24px 0;text-align:center;">' + t("mcp.empty") + '</p>';
       return;
@@ -1843,7 +1843,7 @@ async function loadMcpServers() {
         const name = btn.dataset.name;
         btn.disabled = true;
         btn.textContent = t("mcp.restarting");
-        const result = await window.goodAgent.mcpRestart(name);
+        const result = await window.aideagent.mcpRestart(name);
         if (!result.success) {
           showMcpStatus(t("mcp.restart_fail", {name, error: result.error}), "error");
         }
@@ -1859,7 +1859,7 @@ async function loadMcpServers() {
         const name = btn.dataset.name;
         if (!await showConfirmDialog(t("mcp.remove_confirm", {name}))) return;
         btn.disabled = true;
-        const result = await window.goodAgent.mcpRemove(name);
+        const result = await window.aideagent.mcpRemove(name);
         if (!result.success) {
           showMcpStatus(t("mcp.remove_fail", {name, error: result.error}), "error");
         }
@@ -1877,7 +1877,7 @@ async function loadMcpBuiltins() {
   const listEl = document.getElementById("mcp-builtins-list");
   if (!listEl) return;
   try {
-    const builtins = await window.goodAgent.mcpBuiltins();
+    const builtins = await window.aideagent.mcpBuiltins();
     if (!builtins || builtins.length === 0) {
       listEl.innerHTML = "";
       return;
@@ -1913,7 +1913,7 @@ async function loadMcpBuiltins() {
         const enabled = input.checked;
         // Optimistic UI update — disable toggle during operation
         input.disabled = true;
-        const result = await window.goodAgent.mcpToggleBuiltin(name, enabled);
+        const result = await window.aideagent.mcpToggleBuiltin(name, enabled);
         if (result.success) {
           await loadMcpBuiltins();
           await loadMcpServers(); // Refresh server list too (shows tools)
@@ -1951,7 +1951,7 @@ document.getElementById("mcp-save-all-btn")?.addEventListener("click", async () 
   const btn = document.getElementById("mcp-save-all-btn");
   btn.disabled = true;
   btn.textContent = t("mcp.saving");
-  const result = await window.goodAgent.mcpSaveAll();
+  const result = await window.aideagent.mcpSaveAll();
   if (result.success) {
     showMcpStatus(t("mcp.config_saved"), "success");
   } else {
@@ -2008,7 +2008,7 @@ document.getElementById("mcp-save-btn")?.addEventListener("click", async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = t("mcp.starting");
 
-  const result = await window.goodAgent.mcpAdd(name, config);
+  const result = await window.aideagent.mcpAdd(name, config);
   if (result.success) {
     // Clear form
     document.getElementById("mcp-name-input").value = "";
@@ -2049,7 +2049,7 @@ document.getElementById("mcp-searxng-add-btn")?.addEventListener("click", async 
   btn.disabled = true;
   btn.textContent = t("mcp.searxng_adding");
   try {
-    const result = await window.goodAgent.mcpQuickAddSearxng(url);
+    const result = await window.aideagent.mcpQuickAddSearxng(url);
     if (result.success) {
       showMcpStatus(t("mcp.searxng_added"), "success");
       document.getElementById("mcp-searxng-url").value = "";
@@ -2079,7 +2079,7 @@ async function detectLocalMcp() {
   const resultsEl = document.getElementById("mcp-detect-results");
   if (!resultsEl) return;
   try {
-    const servers = await window.goodAgent.mcpDetectLocal();
+    const servers = await window.aideagent.mcpDetectLocal();
     if (!servers || servers.length === 0) {
       resultsEl.innerHTML = '<span style="color:var(--text-light);">' + t("mcp.detect_empty") + '</span>';
       return;
@@ -2135,7 +2135,7 @@ async function detectLocalMcp() {
         try { env = JSON.parse(btn.dataset.env || "{}"); } catch {}
         btn.disabled = true;
         btn.textContent = t("mcp.importing");
-        const result = await window.goodAgent.mcpAdd(name, { command, args, env });
+        const result = await window.aideagent.mcpAdd(name, { command, args, env });
         if (result.success) {
           showMcpStatus(t("mcp.imported", {name}), "success");
           btn.textContent = t("mcp.import_done");
@@ -2158,7 +2158,7 @@ async function detectLocalMcp() {
         btn.disabled = true;
         btn.textContent = t("mcp.connecting");
         const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
-        const result = await window.goodAgent.mcpAddRemote(name, url, headers);
+        const result = await window.aideagent.mcpAddRemote(name, url, headers);
         if (result.success) {
           showMcpStatus(t("mcp.connected", {name}), "success");
           btn.textContent = t("mcp.connect_done");
@@ -2207,7 +2207,7 @@ function getNextProfileName() {
 
 async function loadPromptStore() {
   try {
-    promptStore = await window.goodAgent.listPromptProfiles();
+    promptStore = await window.aideagent.listPromptProfiles();
     if (!promptStore || !promptStore.profiles) {
       promptStore = { activeProfile: "default", profiles: {} };
     }
@@ -2216,7 +2216,7 @@ async function loadPromptStore() {
     if (!promptStore.profiles["default"]) {
       promptStore.profiles["default"] = {
         id: "default", name: t("prompt.default"), enabled: true,
-        content: await window.goodAgent.getDefaultPrompt(),
+        content: await window.aideagent.getDefaultPrompt(),
       };
     }
     return promptStore;
@@ -2261,7 +2261,7 @@ function renderProfileSelector() {
       if (_promptDirty) await saveCurrentProfile();
       currentProfileId = id;
       promptStore.activeProfile = id;
-      await window.goodAgent.activatePromptProfile(id);
+      await window.aideagent.activatePromptProfile(id);
       renderProfileSelector();
       renderPromptEditor();
     });
@@ -2276,7 +2276,7 @@ async function saveCurrentProfile() {
   if (nameInput && nameInput.value.trim()) {
     profile.name = nameInput.value.trim();
   }
-  await window.goodAgent.savePromptProfile(profile);
+  await window.aideagent.savePromptProfile(profile);
   _promptDirty = false;
   // Re-render selector to reflect any name change
   renderProfileSelector();
@@ -2346,7 +2346,7 @@ function renderPromptEditor() {
         if (id !== currentProfileId) promptStore.profiles[id].enabled = false;
       }
       for (const id of Object.keys(promptStore.profiles)) {
-        await window.goodAgent.savePromptProfile(promptStore.profiles[id]);
+        await window.aideagent.savePromptProfile(promptStore.profiles[id]);
       }
       _promptDirty = false;
       renderProfileSelector();
@@ -2363,11 +2363,11 @@ function renderPromptEditor() {
       const p = getCurrentProfile();
       if (!p) return;
       if (!await showConfirmDialog(t("prompt.delete_confirm", {name: p.name}))) return;
-      await window.goodAgent.deletePromptProfile(currentProfileId);
+      await window.aideagent.deletePromptProfile(currentProfileId);
       delete promptStore.profiles[currentProfileId];
       currentProfileId = "default";
       promptStore.activeProfile = "default";
-      await window.goodAgent.activatePromptProfile("default");
+      await window.aideagent.activatePromptProfile("default");
       renderProfileSelector();
       renderPromptEditor();
       showPromptStatus(t("prompt.deleted", {name: p.name}), "success");
@@ -2411,10 +2411,10 @@ async function addNewProfile() {
   for (const pid of Object.keys(promptStore.profiles)) {
     if (pid !== id) promptStore.profiles[pid].enabled = false;
   }
-  await window.goodAgent.savePromptProfile(newProfile);
-  await window.goodAgent.activatePromptProfile(id);
+  await window.aideagent.savePromptProfile(newProfile);
+  await window.aideagent.activatePromptProfile(id);
   for (const pid of Object.keys(promptStore.profiles)) {
-    if (pid !== id) await window.goodAgent.savePromptProfile(promptStore.profiles[pid]);
+    if (pid !== id) await window.aideagent.savePromptProfile(promptStore.profiles[pid]);
   }
   renderProfileSelector();
   renderPromptEditor();
@@ -2480,7 +2480,7 @@ const deleteAllBtn = $("#delete-all-sessions-btn");
 deleteAllBtn?.addEventListener("click", async () => {
   if (!await showConfirmDialog(t("sidebar.clear_confirm"))) return;
   try {
-    const result = await window.goodAgent.deleteAllSessions();
+    const result = await window.aideagent.deleteAllSessions();
     if (result && result.error) {
       showToast(t("sidebar.delete_fail", {error: result.error}));
       return;
@@ -2549,7 +2549,7 @@ initApiKeys().then(() => {
   const cfg = loadApiConfig();
 // Auto-sync to WeChat bot on startup
 if (cfg.apiUrl && cfg.apiKey) {
-  window.goodAgent.syncApiToWechat?.({ apiUrl: cfg.apiUrl, apiKey: cfg.apiKey, model: cfg.model, apiFormat: cfg.apiFormat || "openai" }).catch(() => {});
+  window.aideagent.syncApiToWechat?.({ apiUrl: cfg.apiUrl, apiKey: cfg.apiKey, model: cfg.model, apiFormat: cfg.apiFormat || "openai" }).catch(() => {});
 }
 if (cfg.provider) {
   if (cwdDisplay) cwdDisplay.textContent = cfg.provider;
@@ -2575,7 +2575,7 @@ let _wxPollTimer = null;
 
 async function initWechatStatus() {
   try {
-    const status = await window.goodAgent.wechatGetStatus();
+    const status = await window.aideagent.wechatGetStatus();
     updateWechatUI(status);
   } catch (e) { console.warn("[wechat] status:", e.message); }
 }
@@ -2639,7 +2639,7 @@ document.getElementById("wechat-login-btn")?.addEventListener("click", async () 
       if (qrImg) qrImg.style.display = "none";
       if (statusEl) { statusEl.textContent = t("social.getting_qr"); statusEl.className = "wechat-qr-status"; }
 
-      const result = await window.goodAgent.wechatGetQrcode();
+      const result = await window.aideagent.wechatGetQrcode();
       if (result.ok) {
         qrImg.src = result.qrcodeUrl;
         qrImg.style.display = "block";
@@ -2658,7 +2658,7 @@ document.getElementById("wechat-login-btn")?.addEventListener("click", async () 
   async function startPoll(id) {
     while (!stopped) {
       try {
-        const r = await window.goodAgent.wechatPollStatus(id);
+        const r = await window.aideagent.wechatPollStatus(id);
         if (stopped) return;
         if (r.status === "scanned") {
           if (statusEl) { statusEl.textContent = t("social.qr_scanned"); statusEl.className = "wechat-qr-status"; }
@@ -2666,7 +2666,7 @@ document.getElementById("wechat-login-btn")?.addEventListener("click", async () 
           if (statusEl) { statusEl.textContent = t("social.qr_success"); statusEl.className = "wechat-qr-status success"; }
           // Save credentials + start bot
           const cfg = loadApiConfig();
-          await window.goodAgent.wechatLogin({
+          await window.aideagent.wechatLogin({
             botToken: r.botToken, botId: r.botId, userId: r.userId,
             apiKey: cfg.apiKey, apiUrl: cfg.apiUrl, model: cfg.model, apiFormat: cfg.apiFormat,
           });
@@ -2692,19 +2692,19 @@ document.getElementById("wechat-login-btn")?.addEventListener("click", async () 
 
 // Logout
 document.getElementById("wechat-logout-btn")?.addEventListener("click", async () => {
-  await window.goodAgent.wechatLogout();
+  await window.aideagent.wechatLogout();
   await initWechatStatus();
   showWxStatus(t("social.logged_out"), "info");
 });
 
 // Bot status updates from main process
-window.goodAgent.onWechatBotStatus?.((data) => {
+window.aideagent.onWechatBotStatus?.((data) => {
   if (data.status === "connected") updateWechatUI({ loggedIn: true, status: "running" });
   else if (data.status === "disconnected") updateWechatUI({ loggedIn: false });
 });
 
 // Incoming message notifications
-window.goodAgent.onWechatIncoming?.((data) => {
+window.aideagent.onWechatIncoming?.((data) => {
   showWxStatus(t("social.incoming", {text: data.text}), "info");
   setTimeout(hideWxStatus, 5000);
 });
@@ -2728,7 +2728,7 @@ initMemoryPanel();
 
 /* ── About / Update Panel ─────────────────────────── */
 (function initAboutPanel() {
-  const AUTO_UPDATE_KEY = "goodagent_auto_update";
+  const AUTO_UPDATE_KEY = "AideAgent_auto_update";
 
   const checkBtn = document.getElementById("update-check-btn");
   const autoCheckbox = document.getElementById("auto-update-checkbox");
@@ -2742,11 +2742,11 @@ initMemoryPanel();
   const versionEl = document.getElementById("about-version");
 
   // Load current version + changelog from GitHub
-  window.goodAgent.updateCheckVersion().then(v => {
+  window.aideagent.updateCheckVersion().then(v => {
     const ver = v || "1.0.1";
     if (versionEl) versionEl.textContent = t("about.version", { version: ver });
     // Fetch current version's release notes from GitHub
-    fetch("https://api.github.com/repos/quanzefeng/GoodAgent/releases/latest")
+    fetch("https://api.github.com/repos/quanzefeng/AideAgent/releases/latest")
       .then(r => r.ok ? r.json() : null)
       .then(release => {
         if (release && release.body && changelogEl) {
@@ -2770,7 +2770,7 @@ initMemoryPanel();
     statusEl.textContent = t("about.checking");
     statusEl.style.color = "var(--text-light)";
     try {
-      await window.goodAgent.updateCheckForUpdates();
+      await window.aideagent.updateCheckForUpdates();
     } catch (e) {
       statusEl.textContent = t("about.check_failed", { error: e.message });
       statusEl.style.color = "var(--danger)";
@@ -2780,11 +2780,11 @@ initMemoryPanel();
 
   // Install button
   installBtn?.addEventListener("click", () => {
-    window.goodAgent.updateInstall();
+    window.aideagent.updateInstall();
   });
 
   // Listen for status updates from main process
-  window.goodAgent.onUpdateStatus?.((data) => {
+  window.aideagent.onUpdateStatus?.((data) => {
     switch (data.status) {
       case "checking":
         statusEl.textContent = t("about.checking");
@@ -2825,7 +2825,7 @@ initMemoryPanel();
   });
 
   // Listen for download progress
-  window.goodAgent.onUpdateProgress?.((data) => {
+  window.aideagent.onUpdateProgress?.((data) => {
     if (progressBar) progressBar.style.width = Math.round(data.percent) + "%";
     if (progressPercent) progressPercent.textContent = Math.round(data.percent) + "%";
   });
@@ -2833,7 +2833,7 @@ initMemoryPanel();
   // Auto-check on startup if enabled
   if (autoEnabled) {
     setTimeout(() => {
-      window.goodAgent.updateCheckForUpdates().catch(() => {});
+      window.aideagent.updateCheckForUpdates().catch(() => {});
     }, 3000);
   }
 })();

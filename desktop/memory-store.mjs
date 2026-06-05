@@ -1,7 +1,7 @@
 /**
- * GoodAgent Memory Store — Multi-file memory with frontmatter
+ * AideAgent Memory Store — Multi-file memory with frontmatter
  *
- * Dir: ~/.goodagent/memory/
+ * Dir: ~/.aideagent/memory/
  *   MEMORY.md                — index entrypoint (≤200 lines)
  *   user_profile.md          — one file per memory, YAML frontmatter
  *   ...
@@ -13,8 +13,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlink
 import { DatabaseSync } from "node:sqlite";
 
 const HOME = homedir();
-const MEM_DIR = join(HOME, ".goodagent", "memory");
-const OLD_DIR = join(HOME, ".goodagent", "memories");
+const MEM_DIR = join(HOME, ".aideagent", "memory");
+const OLD_DIR = join(HOME, ".aideagent", "memories");
 const INDEX_PATH = join(MEM_DIR, "MEMORY.md");
 const FTS_PATH = join(MEM_DIR, "memory-fts.db");
 

@@ -2,15 +2,15 @@ import { sanitize } from './helpers.mjs';
 
 function loadApiConfig() {
   return {
-    provider: localStorage.getItem("goodagent_provider") || "",
-    apiUrl: localStorage.getItem("goodagent_api_url") || "",
-    apiKey: localStorage.getItem("goodagent_api_key") || "",
-    model: localStorage.getItem("goodagent_model") || "",
-    apiFormat: localStorage.getItem("goodagent_api_format") || "openai",
+    provider: localStorage.getItem("AideAgent_provider") || "",
+    apiUrl: localStorage.getItem("AideAgent_api_url") || "",
+    apiKey: localStorage.getItem("AideAgent_api_key") || "",
+    model: localStorage.getItem("AideAgent_model") || "",
+    apiFormat: localStorage.getItem("AideAgent_api_format") || "openai",
   };
 }
 
-const SKILLS_KEY = "goodagent_enabled_skills";
+const SKILLS_KEY = "AideAgent_enabled_skills";
 let _skillsPanelLoaded = false;
 
 // ── L3 Skills (scanned from .agents/.claude) ──
@@ -21,7 +21,7 @@ export async function loadAndRenderSkills() {
   if (!listEl) return;
   try {
     listEl.innerHTML = `<div class="skills-loading">${t("skills.scanning")}</div>`;
-    const skills = await window.goodAgent.listSkills();
+    const skills = await window.aideagent.listSkills();
     if (!skills || skills.length === 0) {
       listEl.innerHTML = `<div class="skills-empty">${t("skills.empty")}</div>`;
       if (countEl) countEl.textContent = t("skills.count").replace("{count}", 0);
@@ -77,7 +77,7 @@ function saveEnabledSkills(skills) {
 
 async function loadCuratorConfig() {
   try {
-    const status = await window.goodAgent.skillsCuratorStatus();
+    const status = await window.aideagent.skillsCuratorStatus();
     const el = document.getElementById("curator-days-input");
     const line = document.getElementById("curator-status-line");
     if (el) el.value = status.archiveAfterDays ?? 30;
@@ -104,7 +104,7 @@ export async function loadSkillsPanel() {
       const steps = document.getElementById("sk-steps")?.value?.trim();
       if (!name || !desc) return;
       try {
-        await window.goodAgent.skillsSaveSkill(name, { name, description: desc, triggers: [name], version: "1.0.0", status: "active", created_at: new Date().toISOString() }, "## Steps\n" + (steps || "1. ") + "\n\n## Notes\n- 手动创建");
+        await window.aideagent.skillsSaveSkill(name, { name, description: desc, triggers: [name], version: "1.0.0", status: "active", created_at: new Date().toISOString() }, "## Steps\n" + (steps || "1. ") + "\n\n## Notes\n- 手动创建");
         createForm.style.display = "none"; createBtn.style.display = "";
         _skillsPanelLoaded = false; await loadSkillsPanel();
       } catch (e) { alert(t("skill_editor.save_fail").replace("{error}", e.message)); }
@@ -118,9 +118,9 @@ export async function refreshSkillsList() {
   const container = document.getElementById("agent-skills-list");
   if (!container) return;
   try {
-    const list = await window.goodAgent.skillsListAll();
-    const patterns = await window.goodAgent.skillsDetectPatterns();
-    const curator = await window.goodAgent.skillsCuratorStatus();
+    const list = await window.aideagent.skillsListAll();
+    const patterns = await window.aideagent.skillsDetectPatterns();
+    const curator = await window.aideagent.skillsCuratorStatus();
 
     let html = '';
     if (curator) {
@@ -163,7 +163,7 @@ export async function refreshSkillsList() {
       const btn = document.getElementById("curator-run-btn");
       btn.disabled = true; btn.textContent = t("thinking.running");
       try {
-        const result = await window.goodAgent.skillsCuratorRun();
+        const result = await window.aideagent.skillsCuratorRun();
         alert(t("agent_skills.curator_done").replace("{archived}", result.archived).replace("{dupes}", result.dupes));
         await refreshSkillsList();
       } catch (e) { alert(t("agent_skills.curator_fail").replace("{error}", e.message)); }
@@ -197,7 +197,7 @@ export async function refreshSkillsList() {
           const nameMatch = skillText.match(/name:\s*(\S+)/);
           const descMatch = skillText.match(/description:\s*"([^"]+)"/);
           const name = nameMatch?.[1] || phrase.replace(/\s+/g, "-").toLowerCase().slice(0, 30);
-          await window.goodAgent.skillsSaveSkill(name, { name, description: (descMatch?.[1] || phrase), triggers: [phrase], version: "1.0.0", status: "active", created_at: new Date().toISOString() }, skillText);
+          await window.aideagent.skillsSaveSkill(name, { name, description: (descMatch?.[1] || phrase), triggers: [phrase], version: "1.0.0", status: "active", created_at: new Date().toISOString() }, skillText);
           await refreshSkillsList();
         } catch (e) { alert(t("agent_skills.generate_fail").replace("{error}", e.message)); }
         btn.disabled = false; btn.textContent = t("agent_skills.generate");
@@ -206,14 +206,14 @@ export async function refreshSkillsList() {
 
     container.querySelectorAll(".skill-toggle-input").forEach(toggle => {
       toggle.addEventListener("change", async () => {
-        try { await window.goodAgent.skillsSetStatus(toggle.dataset.skill, toggle.checked ? "active" : "archived"); } catch {}
+        try { await window.aideagent.skillsSetStatus(toggle.dataset.skill, toggle.checked ? "active" : "archived"); } catch {}
       });
     });
 
     container.querySelectorAll(".skill-delete-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (!confirm(t("agent_skills.delete_confirm").replace("{name}", btn.dataset.skill))) return;
-        await window.goodAgent.skillsDelete(btn.dataset.skill);
+        await window.aideagent.skillsDelete(btn.dataset.skill);
         await refreshSkillsList();
       });
     });
@@ -238,8 +238,8 @@ async function openSkillEditor(name) {
     statusEl.className = "settings-status";
     statusEl.textContent = t("agent_skills.loading");
     statusEl.classList.remove("hidden");
-    let skill = await window.goodAgent.skillsLoadOne(name);
-    if (!skill) skill = await window.goodAgent.loadSkill(name);
+    let skill = await window.aideagent.skillsLoadOne(name);
+    if (!skill) skill = await window.aideagent.loadSkill(name);
     if (!skill) throw new Error(t("skill_editor.not_found"));
     titleEl.textContent = `${t("skill_editor.title")}: ${skill.name || name}`;
     nameEl.value = skill.name || name;
@@ -259,8 +259,8 @@ async function openSkillEditor(name) {
 
 async function exportSkillAsJson(name) {
   try {
-    let skill = await window.goodAgent.skillsLoadOne(name);
-    if (!skill) skill = await window.goodAgent.loadSkill(name);
+    let skill = await window.aideagent.skillsLoadOne(name);
+    if (!skill) skill = await window.aideagent.loadSkill(name);
     if (!skill) throw new Error(t("skill_editor.not_found"));
     const json = JSON.stringify({ name: skill.name, description: skill.description, triggers: skill.triggers || [], body: skill.body || "" }, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -288,7 +288,7 @@ document.getElementById("curator-save-btn")?.addEventListener("click", async () 
   const days = parseInt(input.value, 10);
   if (isNaN(days) || days < 1) { alert(t("kb.days_range")); return; }
   try {
-    await window.goodAgent.skillsCuratorConfig({ archiveAfterDays: days });
+    await window.aideagent.skillsCuratorConfig({ archiveAfterDays: days });
     loadCuratorConfig();
     const line = document.getElementById("curator-status-line");
     if (line) line.textContent += " ✅ " + t("misc.saved");
@@ -323,7 +323,7 @@ document.getElementById("skill-editor-save")?.addEventListener("click", async ()
     if (!name) throw new Error(t("skill_editor.name_required"));
     const triggers = triggersEl.value.split(",").map(s => s.trim()).filter(Boolean);
     const meta = { name, description: descEl.value.trim(), triggers, ...(origName !== name ? { _origin: origName } : {}) };
-    await window.goodAgent.skillsSaveSkill(name, meta, bodyEl.value);
+    await window.aideagent.skillsSaveSkill(name, meta, bodyEl.value);
     overlay.classList.add("hidden");
     if (typeof refreshSkillsList === "function") refreshSkillsList();
   } catch (err) {
@@ -344,7 +344,7 @@ document.getElementById("agent-skills-import-btn")?.addEventListener("click", ()
       if (!data.body && !data.steps) throw new Error(t("skill_editor.invalid_file"));
       const meta = { name: data.name || file.name.replace(/\.[^.]+$/, ""), description: data.description || "", triggers: data.triggers || [] };
       const body = data.body || (Array.isArray(data.steps) ? data.steps.map((s, i) => `${i + 1}. ${s}`).join("\n") : "");
-      await window.goodAgent.skillsSaveSkill(meta.name, meta, body);
+      await window.aideagent.skillsSaveSkill(meta.name, meta, body);
       if (typeof refreshSkillsList === "function") refreshSkillsList();
     } catch (err) { alert(t("skill_editor.import_fail").replace("{error}", err.message)); }
   };

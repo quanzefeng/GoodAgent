@@ -33,7 +33,7 @@ export async function loadKnowledgeBasePanel() {
     opt.value = ""; opt.textContent = "检测中…";
     ollamaModelSelect.appendChild(opt);
     try {
-      const models = await window.goodAgent.kbOllamaModels();
+      const models = await window.aideagent.kbOllamaModels();
       ollamaModelSelect.replaceChildren();
       const list = models.length > 0 ? models : ["nomic-embed-text"];
       for (const m of list) {
@@ -51,9 +51,9 @@ export async function loadKnowledgeBasePanel() {
   }
 
   try {
-    const vault = await window.goodAgent.kbGetVault();
+    const vault = await window.aideagent.kbGetVault();
     if (vaultPath) vaultPath.value = vault || "";
-    const cfg = await window.goodAgent.kbConfig();
+    const cfg = await window.aideagent.kbConfig();
     if (embeddingSelect) embeddingSelect.value = cfg.embeddingProvider || "local";
     const savedModel = cfg.ollamaEmbedModel || "nomic-embed-text";
     if (cfg.embeddingProvider === "ollama") {
@@ -65,7 +65,7 @@ export async function loadKnowledgeBasePanel() {
     if (maxNotes) maxNotes.value = cfg.maxNotes || 5;
     if (maxChars) maxChars.value = cfg.maxChars || 500;
     if (maxBodyChars) maxBodyChars.value = cfg.maxBodyChars || 0;
-    const status = await window.goodAgent.kbStatus();
+    const status = await window.aideagent.kbStatus();
     if (autoDetectedSpan) {
       // Show auto-detected value as a hint next to the input
       if (status.autoDetectedMaxBodyChars > 0) {
@@ -81,7 +81,7 @@ export async function loadKnowledgeBasePanel() {
 
   pickBtn?.addEventListener("click", async () => {
     try {
-      const result = await window.goodAgent.kbPickVault();
+      const result = await window.aideagent.kbPickVault();
       if (result?.canceled) return;
       if (result?.ok && result.vault) {
         vaultPath.value = result.vault;
@@ -99,20 +99,20 @@ export async function loadKnowledgeBasePanel() {
     const isOllama = embeddingSelect.value === "ollama";
     if (ollamaModelRow) ollamaModelRow.style.display = isOllama ? "block" : "none";
     if (isOllama) await fetchOllamaModels();
-    await window.goodAgent.kbSetConfig({ embeddingProvider: embeddingSelect.value });
+    await window.aideagent.kbSetConfig({ embeddingProvider: embeddingSelect.value });
   });
   ollamaModelSelect?.addEventListener("change", async () => {
-    await window.goodAgent.kbSetConfig({ ollamaEmbedModel: ollamaModelSelect.value || "nomic-embed-text" });
+    await window.aideagent.kbSetConfig({ ollamaEmbedModel: ollamaModelSelect.value || "nomic-embed-text" });
   });
   maxNotes?.addEventListener("change", async () => {
-    await window.goodAgent.kbSetConfig({ maxNotes: parseInt(maxNotes.value) || 5 });
+    await window.aideagent.kbSetConfig({ maxNotes: parseInt(maxNotes.value) || 5 });
   });
   maxChars?.addEventListener("change", async () => {
-    await window.goodAgent.kbSetConfig({ maxChars: parseInt(maxChars.value) || 500 });
+    await window.aideagent.kbSetConfig({ maxChars: parseInt(maxChars.value) || 500 });
   });
   maxBodyCharsSaveBtn?.addEventListener("click", async () => {
     const val = parseInt(maxBodyChars.value) || 0;
-    await window.goodAgent.kbSetConfig({ maxBodyChars: val });
+    await window.aideagent.kbSetConfig({ maxBodyChars: val });
     // Brief visual feedback
     const orig = maxBodyCharsSaveBtn.textContent;
     maxBodyCharsSaveBtn.textContent = "✓";
@@ -125,7 +125,7 @@ export async function loadKnowledgeBasePanel() {
     scanBtn.textContent = t("kb.indexing");
     statusEl.textContent = t("kb.scanning");
     try {
-      const result = await window.goodAgent.kbScan();
+      const result = await window.aideagent.kbScan();
       if (result.error) {
         statusEl.textContent = t("kb.error").replace("{error}", result.error);
       } else {
@@ -153,7 +153,7 @@ export async function loadKnowledgeBasePanel() {
       statusDiv.textContent = t("kb.searching");
       testResults.appendChild(statusDiv);
       try {
-        const results = await window.goodAgent.kbSearch(query, 5);
+        const results = await window.aideagent.kbSearch(query, 5);
         testResults.replaceChildren();
         if (results.length === 0) {
           const noDiv = document.createElement("div");
@@ -200,7 +200,7 @@ export function initKnowledgeBase() {
 
   document.getElementById("kb-pick-vault-btn")?.addEventListener("click", async () => {
     try {
-      const result = await window.goodAgent.kbPickVault();
+      const result = await window.aideagent.kbPickVault();
       if (result?.canceled) return;
       if (result?.ok && result.vault) {
         const vp = document.getElementById("kb-vault-path");
@@ -214,7 +214,7 @@ export function initKnowledgeBase() {
 
   document.getElementById("kb-clear-vault-btn")?.addEventListener("click", async () => {
     try {
-      await window.goodAgent.kbSetVault("");
+      await window.aideagent.kbSetVault("");
       const vp = document.getElementById("kb-vault-path");
       if (vp) vp.value = "";
       const st = document.getElementById("kb-status");
@@ -226,18 +226,18 @@ export function initKnowledgeBase() {
 
   const _kbToggle = document.getElementById("kb-toggle");
   if (_kbToggle) {
-    _kbToggle.checked = localStorage.getItem("goodagent_kb_enabled") === "true";
+    _kbToggle.checked = localStorage.getItem("AideAgent_kb_enabled") === "true";
     _kbToggle.addEventListener("change", () => {
-      localStorage.setItem("goodagent_kb_enabled", _kbToggle.checked);
+      localStorage.setItem("AideAgent_kb_enabled", _kbToggle.checked);
     });
   }
 
   const _webSearchToggle = document.getElementById("web-search-toggle");
   if (_webSearchToggle) {
-    const saved = localStorage.getItem("goodagent_web_search_enabled");
+    const saved = localStorage.getItem("AideAgent_web_search_enabled");
     _webSearchToggle.checked = saved === null ? true : saved === "true";
     _webSearchToggle.addEventListener("change", () => {
-      localStorage.setItem("goodagent_web_search_enabled", _webSearchToggle.checked);
+      localStorage.setItem("AideAgent_web_search_enabled", _webSearchToggle.checked);
     });
   }
 }

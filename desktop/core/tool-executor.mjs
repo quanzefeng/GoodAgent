@@ -89,7 +89,7 @@ export const runPowerShell = runShell;
 // Read search provider preference from config file
 function readSearchProviderPref() {
   try {
-    const keyPath = join(homedir(), ".goodagent", "api-keys.enc");
+    const keyPath = join(homedir(), ".aideagent", "api-keys.enc");
     if (existsSync(keyPath)) {
       const data = readFileSync(keyPath);
       const store = safeStorage.isEncryptionAvailable()
@@ -272,7 +272,7 @@ export async function runTool(tc) {
           let tavilyKey = process.env.TAVILY_API_KEY;
           if (!tavilyKey) {
             try {
-              const keyPath = join(homedir(), ".goodagent", "api-keys.enc");
+              const keyPath = join(homedir(), ".aideagent", "api-keys.enc");
               if (existsSync(keyPath)) {
                 const data = readFileSync(keyPath);
                 const store = safeStorage.isEncryptionAvailable()

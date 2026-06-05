@@ -1,9 +1,9 @@
 /**
- * GoodAgent i18n — Lightweight translation system
+ * AideAgent i18n — Lightweight translation system
  * Supports: zh (简体中文), en (English)
  */
 
-const LANG_KEY = "goodagent_lang";
+const LANG_KEY = "AideAgent_lang";
 
 const translations = {
   zh: {
@@ -425,7 +425,7 @@ const translations = {
     "api.fetch_models_btn": "获取模型",
 
     // ── Additional Chat Keys ──
-    "chat.welcome_title": "GoodAgent",
+    "chat.welcome_title": "AideAgent",
     "chat.task_progress": "当前任务进度",
     "chat.context_usage": "上下文使用量",
 
@@ -434,7 +434,7 @@ const translations = {
 
     // ── Workspace First-Pick Modal ──
     "workspace.first_pick.title": "📁 选择工作区间",
-    "workspace.first_pick.desc": "请选择你的项目目录。GoodAgent 会以此目录为根运行所有文件操作、命令与 LSP 服务。",
+    "workspace.first_pick.desc": "请选择你的项目目录。AideAgent 会以此目录为根运行所有文件操作、命令与 LSP 服务。",
     "workspace.first_pick.choose": "选择目录",
     "workspace.first_pick.skip": "稍后",
 
@@ -892,7 +892,7 @@ const translations = {
     "api.fetch_models_btn": "Fetch Models",
 
     // ── Additional Chat Keys ──
-    "chat.welcome_title": "GoodAgent",
+    "chat.welcome_title": "AideAgent",
     "chat.task_progress": "Task Progress",
     "chat.context_usage": "Context Usage",
 
@@ -901,7 +901,7 @@ const translations = {
 
     // ── Workspace First-Pick Modal ──
     "workspace.first_pick.title": "📁 Select Workspace",
-    "workspace.first_pick.desc": "Choose your project directory. GoodAgent runs all file operations, shell commands, and LSP services relative to this folder.",
+    "workspace.first_pick.desc": "Choose your project directory. AideAgent runs all file operations, shell commands, and LSP services relative to this folder.",
     "workspace.first_pick.choose": "Choose Folder",
     "workspace.first_pick.skip": "Later",
 

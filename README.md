@@ -1,4 +1,4 @@
-# GoodAgent
+# AideAgent
 
 > 一个功能强大的桌面 AI 助手，拥有 28 个内置工具、知识库 RAG、多模型支持、Hook 扩展、自动压缩继续、自进化记忆等能力。  
 > A powerful desktop AI assistant with 28 built-in tools, RAG knowledge base, multi-model support, Hook extensions, automatic context continuation, and self-evolving memory.
@@ -7,9 +7,9 @@
 
 ## 项目简介 / Introduction
 
-**中文**：GoodAgent 是一款桌面 AI 助手，支持多种大语言模型（DeepSeek、Claude、GLM、Qwen、MiniMax 等），内置丰富的工具集，可以帮你编程、搜索、管理文件、操作 Git、查阅知识库，让 AI 真正成为一个能干的助手。
+**中文**：AideAgent 是一款桌面 AI 助手，支持多种大语言模型（DeepSeek、Claude、GLM、Qwen、MiniMax 等），内置丰富的工具集，可以帮你编程、搜索、管理文件、操作 Git、查阅知识库，让 AI 真正成为一个能干的助手。
 
-**English**: GoodAgent is a desktop AI assistant supporting multiple LLMs (DeepSeek, Claude, GLM, Qwen, MiniMax, etc.) with a rich built-in toolset. It helps you code, search, manage files, operate Git, and query knowledge bases — making AI a truly capable assistant.
+**English**: AideAgent is a desktop AI assistant supporting multiple LLMs (DeepSeek, Claude, GLM, Qwen, MiniMax, etc.) with a rich built-in toolset. It helps you code, search, manage files, operate Git, and query knowledge bases — making AI a truly capable assistant.
 
 ---
 
@@ -191,13 +191,13 @@ Built-in 8 provider presets with one-click switching. Supports both OpenAI-compa
 **中文**：Agent 启动时自动读取项目规范文件。
 
 - **多标准兼容**：优先读 `AGENTS.md`，兼容 `CLAUDE.md`
-- **两级加载**：项目级（workspace 根目录）+ 全局级（`~/.goodagent/CLAUDE.md`）
+- **两级加载**：项目级（workspace 根目录）+ 全局级（`~/.aideagent/CLAUDE.md`）
 - **零配置**：文件存在就自动加载，不存在就静默跳过
 
 **English**: Automatically loads project context files at session start.
 
 - **Multi-Standard**: Reads `AGENTS.md` first, `CLAUDE.md` as fallback
-- **Two Levels**: Project-level (workspace root) + global-level (`~/.goodagent/CLAUDE.md`)
+- **Two Levels**: Project-level (workspace root) + global-level (`~/.aideagent/CLAUDE.md`)
 - **Zero Config**: Files are loaded automatically if they exist, silently skipped otherwise
 
 ---
@@ -343,9 +343,9 @@ Pre-built binaries — no Node.js required.
 
 | 平台 / Platform | 下载 / Download |
 |------|------|
-| Windows (.exe) | [GitHub Releases](https://github.com/quanzefeng/GoodAgent/releases) |
-| macOS (.dmg) | [GitHub Releases](https://github.com/quanzefeng/GoodAgent/releases) |
-| Linux (.deb / .AppImage) | [GitHub Releases](https://github.com/quanzefeng/GoodAgent/releases) |
+| Windows (.exe) | [GitHub Releases](https://github.com/quanzefeng/AideAgent/releases) |
+| macOS (.dmg) | [GitHub Releases](https://github.com/quanzefeng/AideAgent/releases) |
+| Linux (.deb / .AppImage) | [GitHub Releases](https://github.com/quanzefeng/AideAgent/releases) |
 
 ---
 
@@ -354,8 +354,8 @@ Pre-built binaries — no Node.js required.
 ### 源码运行 / Run from Source
 
 ```bash
-git clone https://github.com/quanzefeng/GoodAgent.git
-cd GoodAgent/desktop
+git clone https://github.com/quanzefeng/AideAgent.git
+cd AideAgent/desktop
 npm install        # postinstall 自动下载 MiniLM-L6 模型（~23MB）
 npm start
 ```
@@ -368,8 +368,8 @@ npm run dist:mac     # 打包 macOS .dmg
 npm run dist:linux   # 打包 Linux .deb + .AppImage
 ```
 
-CI 构建通过 GitHub Actions 手动触发，产物自动发布到 [Releases](https://github.com/quanzefeng/GoodAgent/releases)。  
-CI builds are triggered manually via GitHub Actions and auto-published to [Releases](https://github.com/quanzefeng/GoodAgent/releases).
+CI 构建通过 GitHub Actions 手动触发，产物自动发布到 [Releases](https://github.com/quanzefeng/AideAgent/releases)。  
+CI builds are triggered manually via GitHub Actions and auto-published to [Releases](https://github.com/quanzefeng/AideAgent/releases).
 
 ### 配置 API / Configure API
 
@@ -444,8 +444,8 @@ desktop/
 
 ## 赞赏支持 / Sponsor
 
-如果 GoodAgent 帮到了你，欢迎请作者喝杯咖啡 ☕  
-If GoodAgent helps you, consider buying the author a coffee ☕
+如果 AideAgent 帮到了你，欢迎请作者喝杯咖啡 ☕  
+If AideAgent helps you, consider buying the author a coffee ☕
 
 <div align="center">
   <img src="assets/alipay-qr.jpg" width="200" alt="支付宝" />
@@ -459,4 +459,4 @@ If GoodAgent helps you, consider buying the author a coffee ☕
 
 - 微信 / WeChat: q2993919594
 - 谷歌邮箱 / Email: zefengquan5@gmail.com
-- GitHub: https://github.com/quanzefeng/GoodAgent
+- GitHub: https://github.com/quanzefeng/AideAgent

@@ -1,10 +1,10 @@
 {
-  "name": "goodagent-desktop",
+  "name": "aideagent-desktop",
   "version": "1.0.5",
-  "description": "GoodAgent Desktop — Electron GUI wrapper",
-  "repository": "https://github.com/quanzefeng/GoodAgent",
+  "description": "AideAgent Desktop — Electron GUI wrapper",
+  "repository": "https://github.com/quanzefeng/AideAgent",
   "author": "quanzefeng <quanzefeng@gmail.com>",
-  "homepage": "https://github.com/quanzefeng/GoodAgent",
+  "homepage": "https://github.com/quanzefeng/AideAgent",
   "type": "module",
   "main": "main.mjs",
   "scripts": {
@@ -25,11 +25,11 @@
   "publish": {
     "provider": "github",
     "owner": "quanzefeng",
-    "repo": "GoodAgent"
+    "repo": "AideAgent"
   },
   "build": {
-    "appId": "com.goodagent.desktop",
-    "productName": "GoodAgent",
+    "appId": "com.aideagent.desktop",
+    "productName": "AideAgent",
     "asar": true,
     "files": [
       "*.mjs",
@@ -52,13 +52,13 @@
     "win": {
       "target": "nsis",
       "icon": "icon.ico",
-      "artifactName": "GoodAgent-${version}-Windows-${arch}.${ext}",
+      "artifactName": "AideAgent-${version}-Windows-${arch}.${ext}",
       "requestedExecutionLevel": "asInvoker"
     },
     "mac": {
       "target": "dmg",
       "icon": "icon.png",
-      "artifactName": "GoodAgent-${version}-macOS-${arch}.${ext}",
+      "artifactName": "AideAgent-${version}-macOS-${arch}.${ext}",
       "category": "public.app-category.developer-tools"
     },
     "linux": {
@@ -67,7 +67,7 @@
         "AppImage"
       ],
       "icon": "icon.png",
-      "artifactName": "GoodAgent-${version}-Linux-${arch}.${ext}",
+      "artifactName": "AideAgent-${version}-Linux-${arch}.${ext}",
       "category": "Development"
     },
     "nsis": {

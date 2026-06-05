@@ -1,4 +1,4 @@
-// ── Shared State for GoodAgent Main Process ──────────────────
+// ── Shared State for AideAgent Main Process ──────────────────
 // All mutable state shared across modules lives here.
 // Modules import from this file and mutate the exported objects.
 

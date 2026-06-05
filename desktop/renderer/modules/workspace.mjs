@@ -10,7 +10,7 @@ function applyPath(path) {
 
 async function refreshWorkspace() {
   try {
-    const ws = await window.goodAgent.workspaceGet();
+    const ws = await window.aideagent.workspaceGet();
     applyPath(ws);
   } catch {}
 }
@@ -29,7 +29,7 @@ function showFirstPickModal(currentDefault) {
 
   chooseBtn.onclick = async () => {
     try {
-      const result = await window.goodAgent.workspacePick();
+      const result = await window.aideagent.workspacePick();
       if (result?.ok && result.workspace) {
         applyPath(result.workspace);
         close();
@@ -44,7 +44,7 @@ function showFirstPickModal(currentDefault) {
   skipBtn.onclick = () => {
     // User accepted the default (launch dir / install dir). Persist it
     // so the modal doesn't re-appear on the next launch.
-    window.goodAgent.workspaceSet(currentDefault).then(() => {
+    window.aideagent.workspaceSet(currentDefault).then(() => {
       applyPath(currentDefault);
       close();
     }).catch(e => console.error("[workspace] set default failed:", e.message));
@@ -58,9 +58,9 @@ export async function initWorkspace() {
   // show the picker modal so the user lands in the right project
   // folder instead of the install dir.
   try {
-    const { needs } = await window.goodAgent.workspaceNeedsFirstPick();
+    const { needs } = await window.aideagent.workspaceNeedsFirstPick();
     if (needs) {
-      const current = await window.goodAgent.workspaceGet();
+      const current = await window.aideagent.workspaceGet();
       showFirstPickModal(current);
     }
   } catch (e) {
@@ -70,7 +70,7 @@ export async function initWorkspace() {
 
 document.getElementById("workspace-bar")?.addEventListener("click", async () => {
   try {
-    const result = await window.goodAgent.workspacePick();
+    const result = await window.aideagent.workspacePick();
     if (result?.ok && result.workspace) {
       applyPath(result.workspace);
     }

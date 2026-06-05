@@ -502,7 +502,7 @@ export function registerIpcHandlers() {
   });
 
   // ── Encrypted API Key Storage ──────────────────────────────
-  const KEY_STORE_PATH = join(homedir(), ".goodagent", "api-keys.enc");
+  const KEY_STORE_PATH = join(homedir(), ".aideagent", "api-keys.enc");
 
   function loadKeyStore() {
     try {

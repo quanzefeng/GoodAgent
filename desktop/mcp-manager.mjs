@@ -164,7 +164,7 @@ class McpManager {
       await this._request(name, "initialize", {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "goodagent", version: "1.0" },
+        clientInfo: { name: "AideAgent", version: "1.0" },
       }, 30000);
 
       // Step 2: Initialized notification
@@ -239,7 +239,7 @@ class McpManager {
         params: {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "goodagent", version: "1.0" },
+          clientInfo: { name: "AideAgent", version: "1.0" },
         },
       }, ac.signal);
       if (initResult.error) throw new Error(initResult.error.message);

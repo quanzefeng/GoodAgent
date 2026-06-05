@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("goodAgent", {
+contextBridge.exposeInMainWorld("aideagent", {
   test: "hello",
   version: process.versions.electron,
   respondPermission: (id, allow) => ipcRenderer.invoke("permission:respond", { id, allow }),

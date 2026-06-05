@@ -1,4 +1,4 @@
-// ── GoodAgent — Main Entry Point ────────────────────────────
+// ── AideAgent — Main Entry Point ────────────────────────────
 // Thin entry: app lifecycle + window creation + module wiring.
 // All business logic lives in core/*.mjs modules.
 
@@ -55,10 +55,10 @@ function createWindow() {
   });
 
   mainWindow.webContents.on("did-finish-load", () => {
-    mainWindow.webContents.executeJavaScript("typeof window.goodAgent !== 'undefined'").then((hasAPI) => {
-      console.log("[main] window.goodAgent available in renderer:", hasAPI);
+    mainWindow.webContents.executeJavaScript("typeof window.aideagent !== 'undefined'").then((hasAPI) => {
+      console.log("[main] window.aideagent available in renderer:", hasAPI);
       if (!hasAPI) {
-        console.error("[main] PRELOAD FAILED - window.goodAgent is undefined!");
+        console.error("[main] PRELOAD FAILED - window.aideagent is undefined!");
       }
     }).catch((err) => {
       console.error("[main] preload verification error:", err.message);
@@ -82,6 +82,19 @@ function createWindow() {
 // ── App Lifecycle ──────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // ── One-time migration: rename old config dir .goodagent → .aideagent ──
+  const { existsSync, renameSync } = await import("node:fs");
+  const oldDir = join(app.getPath("home"), ".goodagent");
+  const newDir = join(app.getPath("home"), ".aideagent");
+  if (existsSync(oldDir) && !existsSync(newDir)) {
+    try {
+      renameSync(oldDir, newDir);
+      console.log("[migration] Renamed ~/.goodagent → ~/.aideagent");
+    } catch (e) {
+      console.error("[migration] Failed to rename ~/.goodagent → ~/.aideagent:", e.message);
+    }
+  }
+
   // Load persisted workspace before window creation so the renderer's
   // first-pick detection sees the right state on first paint.
   initWorkspaceFromConfig();

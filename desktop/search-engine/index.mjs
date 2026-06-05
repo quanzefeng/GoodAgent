@@ -194,7 +194,7 @@ async function searchGitHub(query, maxResults) {
   const perPage = Math.min(maxResults, 5);
   const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=${perPage}&sort=stars`;
   const res = await fetch(url, {
-    headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "GoodAgent" },
+    headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "AideAgent" },
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
