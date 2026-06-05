@@ -368,6 +368,19 @@ export function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle("mcp:builtins", async () => {
+    return mcpManager.getBuiltins();
+  });
+
+  ipcMain.handle("mcp:toggle-builtin", async (_event, { name, enabled }) => {
+    try {
+      await mcpManager.toggleBuiltin(name, enabled);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   ipcMain.handle("mcp:detect-local", async () => {
     const HOME = homedir();
     const PLATFORM = process.platform;

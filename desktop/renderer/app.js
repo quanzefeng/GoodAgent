@@ -1817,9 +1817,6 @@ async function loadMcpServers() {
     }
     listEl.innerHTML = servers.map(s => {
       const statusIcon = s.status === "running" ? "🟢" : s.status === "error" ? "🔴" : "🟡";
-      const toolList = s.tools.length > 0
-        ? s.tools.map(t => `<code style="font-size:12px;background:var(--bg-tertiary);padding:1px 6px;border-radius:4px;white-space:nowrap;">${sanitize(t.name)}</code>`).join(" ")
-        : '<span class="hint" style="font-size:12px;">' + t("mcp.no_tools") + '</span>';
       const errMsg = s.error ? `<div class="mcp-server-error">${sanitize(s.error)}</div>` : "";
       return `<div class="mcp-server-card">
         <div class="mcp-server-header">
@@ -1836,10 +1833,6 @@ async function loadMcpServers() {
           </div>
         </div>
         ${errMsg}
-        <div class="mcp-server-tools">
-          <span class="hint" style="font-size:12px;margin-right:6px;">${t("mcp.tools_label")}</span>
-          ${toolList}
-        </div>
       </div>`;
     }).join("");
 
@@ -1878,6 +1871,63 @@ async function loadMcpServers() {
   }
 }
 
+/** Load and render built-in MCP servers with toggle switches. */
+async function loadMcpBuiltins() {
+  const listEl = document.getElementById("mcp-builtins-list");
+  if (!listEl) return;
+  try {
+    const builtins = await window.goodAgent.mcpBuiltins();
+    if (!builtins || builtins.length === 0) {
+      listEl.innerHTML = "";
+      return;
+    }
+    const lang = getLang();
+    listEl.innerHTML = builtins.map(b => {
+      const label = lang === "zh" ? b.label : (b.labelEn || b.label);
+      const desc = lang === "zh" ? b.description : (b.descriptionEn || b.description);
+      const statusColor = b.running ? "#22c55e" : b.status === "error" ? "#ef4444" : "#6b7280";
+      const statusText = b.running ? t("mcp.running") : b.status === "error" ? t("mcp.error") : t("mcp.builtin_disable");
+      const errMsg = b.error ? `<div style="font-size:11px;color:var(--danger);margin-top:4px;">${sanitize(b.error)}</div>` : "";
+      return `<div class="mcp-builtin-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border);">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;font-weight:500;">${sanitize(label)}</span>
+            <span style="font-size:11px;color:${statusColor};">● ${statusText}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:2px;">${sanitize(desc)}</div>
+          ${errMsg}
+        </div>
+        <label class="builtin-toggle" style="position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0;margin-left:10px;cursor:pointer;">
+          <input type="checkbox" class="builtin-toggle-input" data-name="${sanitize(b.name)}" ${b.enabled ? "checked" : ""} style="opacity:0;width:0;height:0;position:absolute;">
+          <span class="builtin-toggle-slider" style="position:absolute;inset:0;background-color:${b.enabled ? "#22c55e" : "#4b5563"};border-radius:10px;transition:0.3s;"></span>
+          <span class="builtin-toggle-knob" style="position:absolute;height:16px;width:16px;left:2px;bottom:2px;background-color:white;border-radius:50%;transition:0.3s;transform:${b.enabled ? "translateX(16px)" : "translateX(0)"};"></span>
+        </label>
+      </div>`;
+    }).join("");
+
+    // Bind toggle events
+    listEl.querySelectorAll(".builtin-toggle-input").forEach(input => {
+      input.addEventListener("change", async () => {
+        const name = input.dataset.name;
+        const enabled = input.checked;
+        // Optimistic UI update — disable toggle during operation
+        input.disabled = true;
+        const result = await window.goodAgent.mcpToggleBuiltin(name, enabled);
+        if (result.success) {
+          await loadMcpBuiltins();
+          await loadMcpServers(); // Refresh server list too (shows tools)
+        } else {
+          input.checked = !enabled; // Revert
+          showMcpStatus(t("mcp.start_fail", { error: result.error }), "error");
+          await loadMcpBuiltins();
+        }
+      });
+    });
+  } catch (err) {
+    console.error("[mcp] builtins load error:", err);
+  }
+}
+
 function showMcpStatus(msg, type = "info") {
   const el = document.getElementById("mcp-settings-status");
   if (!el) return;
@@ -1890,7 +1940,10 @@ function showMcpStatus(msg, type = "info") {
 }
 
 // Refresh button
-document.getElementById("mcp-refresh-btn")?.addEventListener("click", loadMcpServers);
+document.getElementById("mcp-refresh-btn")?.addEventListener("click", () => {
+  loadMcpServers();
+  loadMcpBuiltins();
+});
 
 // Save all button
 document.getElementById("mcp-save-all-btn")?.addEventListener("click", async () => {
@@ -1973,13 +2026,14 @@ document.getElementById("mcp-save-btn")?.addEventListener("click", async () => {
   saveBtn.textContent = t("mcp.save_start");
 });
 
-// Load MCP servers + auto-detect when the MCP tab is opened
+// Load MCP servers + builtins + auto-detect when the MCP tab is opened
 let _mcpTabLoaded = false;
 document.querySelector('.settings-tab[data-tab="mcp"]')?.addEventListener("click", () => {
   if (_mcpTabLoaded) return;
   _mcpTabLoaded = true;
   const listEl = document.getElementById("mcp-server-list");
   if (listEl) loadMcpServers();
+  loadMcpBuiltins();
   detectLocalMcp();
 });
 
@@ -2686,9 +2740,19 @@ initMemoryPanel();
   const changelogEl = document.getElementById("changelog-content");
   const versionEl = document.getElementById("about-version");
 
-  // Load current version
+  // Load current version + changelog from GitHub
   window.goodAgent.updateCheckVersion().then(v => {
-    if (versionEl) versionEl.textContent = t("about.version", { version: v || "1.0.1" });
+    const ver = v || "1.0.1";
+    if (versionEl) versionEl.textContent = t("about.version", { version: ver });
+    // Fetch current version's release notes from GitHub
+    fetch("https://api.github.com/repos/quanzefeng/GoodAgent/releases/latest")
+      .then(r => r.ok ? r.json() : null)
+      .then(release => {
+        if (release && release.body && changelogEl) {
+          changelogEl.innerHTML = marked.parse(release.body);
+        }
+      })
+      .catch(() => { /* silent fallback — keep default HTML */ });
   }).catch(() => {});
 
   // Load auto-check preference
@@ -2745,7 +2809,9 @@ initMemoryPanel();
       case "downloaded":
         statusEl.textContent = t("about.downloaded", { version: data.version });
         statusEl.style.color = "#22c55e";
-        progressContainer?.classList.add("hidden");
+        // Show 100% on progress bar, keep it visible, and show install button
+        if (progressBar) progressBar.style.width = "100%";
+        if (progressPercent) progressPercent.textContent = "100%";
         installBtn?.classList.remove("hidden");
         break;
       case "error":

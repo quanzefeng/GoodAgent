@@ -53,8 +53,16 @@ Built-in 8 provider presets with one-click switching. Supports both OpenAI-compa
 #### 网络搜索 / Web
 | 工具 / Tool | 说明 / Description |
 |------|------|
-| `web_search` | 搜索互联网（Tavily API）/ Search the internet |
+| `web_search` | 🌟 **推荐**：Tavily API — 稳定、高速、适合生产环境。配置 API Key 后使用 / **Recommended**: Tavily API — stable, fast, production-ready. Requires API Key |
+| `web_search` | 🆓 **免费内置**：元搜索引擎（自动 Bing 回退）— 零配置，开箱即用，适合个人低频使用 / **Built-in Fallback**: Meta-search engine (auto Bing fallback) — zero config, works out of the box, for personal low-frequency use |
 | `web_fetch` | 抓取并提取网页内容（含 SSRF 防护）/ Fetch and extract web content (with SSRF protection) |
+
+**搜索优先级**：
+
+1. **Tavily API（推荐）**：在设置中填入有效的 Tavily Key 后自动启用，搜索质量最高、响应最快
+2. **内置元搜索（免配置）**：未配置 Tavily 时自动降级，通过多引擎并行抓取（Bing + 备用源）返回结果
+3. **Tavily API (Recommended)**: Auto-enabled when a valid Tavily Key is configured in Settings — best quality and fastest response
+4. **Built-in Meta-Search (Zero Config)**: Auto-fallback when Tavily is not configured — parallel scraping across multiple engines (Bing + fallback sources)
 
 #### 版本控制 / Version Control
 | 工具 / Tool | 说明 / Description |

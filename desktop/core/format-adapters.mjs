@@ -20,7 +20,14 @@ export function getAllToolDefs(kbEnabled = true, webSearchEnabled = true) {
   const mcpFilter = webSearchEnabled ? {} : { excludeCategories: ["web-search"] };
   const mcpDefs = mcpManager.listAllToolDefs(mcpFilter);
   console.log("[plan-mode] getAllToolDefs planMode =", planMode, "builtins =", builtins.length, "mcp =", planMode ? 0 : mcpDefs.length);
-  const result = planMode ? builtins : [...builtins, ...mcpDefs];
+  // Deduplicate by tool name — duplicate MCP servers (builtin + imported) can collide
+  const merged = planMode ? builtins : [...builtins, ...mcpDefs];
+  const seen = new Set();
+  const result = [];
+  for (const def of merged) {
+    const name = def.function.name;
+    if (!seen.has(name)) { seen.add(name); result.push(def); }
+  }
   _cachedToolDefs = result;
   _cachedToolKey = key;
   return result;

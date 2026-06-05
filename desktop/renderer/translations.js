@@ -457,6 +457,10 @@ const translations = {
     "mcp.detect_local": "📡 检测本地 MCP 配置",
     "mcp.empty_hint": "没有配置 MCP 服务器。点击\"添加服务器\"开始。",
     "mcp.refresh": "刷新",
+    "mcp.builtins_title": "🔌 内置服务（一键开启）",
+    "mcp.builtins_hint": "预置的 MCP 服务器，免配置开箱即用。开启后将在 AI 对话中自动可用。",
+    "mcp.builtin_enable": "开启",
+    "mcp.builtin_disable": "关闭",
 
     // ── Additional Agent Skills Keys ──
     "agent_skills.refresh": "刷新",
@@ -921,6 +925,10 @@ const translations = {
     "mcp.empty_hint": "No MCP servers configured. Click \"Add Server\" to get started.",
     "mcp.import_btn": "Import",
     "mcp.refresh": "Refresh",
+    "mcp.builtins_title": "🔌 Built-in Services (One-Click)",
+    "mcp.builtins_hint": "Pre-configured MCP servers, zero configuration required. Toggle on to make them available in AI conversations.",
+    "mcp.builtin_enable": "Enable",
+    "mcp.builtin_disable": "Disable",
 
     // ── Additional Agent Skills Keys ──
     "agent_skills.refresh": "Refresh",

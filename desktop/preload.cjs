@@ -75,6 +75,8 @@ contextBridge.exposeInMainWorld("goodAgent", {
   mcpAddRemote: (name, url, headers) => ipcRenderer.invoke("mcp:add-remote", { name, url, headers }),
   mcpSaveAll: () => ipcRenderer.invoke("mcp:save-all"),
   mcpQuickAddSearxng: (url) => ipcRenderer.invoke("mcp:quick-add-searxng", url),
+  mcpBuiltins: () => ipcRenderer.invoke("mcp:builtins"),
+  mcpToggleBuiltin: (name, enabled) => ipcRenderer.invoke("mcp:toggle-builtin", { name, enabled }),
   downloadMarkdown: (content) => ipcRenderer.invoke("dialog:download-markdown", content),
   // WeChat iLink Bridge
   wechatGetQrcode: () => ipcRenderer.invoke("wechat:get-qrcode"),

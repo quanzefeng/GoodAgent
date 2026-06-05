@@ -15,6 +15,33 @@ import { app } from "electron";
  * Config stored at: app.getPath("userData")/mcp-servers.json
  * Format matches Claude Code's .mcp.json for easy migration.
  */
+/**
+ * Built-in MCP server definitions.
+ * These are pre-configured in code — users just toggle them on/off.
+ */
+const BUILTIN_SERVERS = Object.freeze({
+  "edge-browser": {
+    label: "Edge 浏览器",
+    labelEn: "Edge Browser",
+    description: "通过 Playwright 操控 Edge 浏览器，支持网页抓取、截图、自动化操作",
+    descriptionEn: "Control Edge via Playwright — web scraping, screenshots, automation",
+    command: "npx",
+    args: ["-y", "@playwright/mcp@latest", "--browser", "msedge"],
+    env: {},
+    docs: "https://www.npmjs.com/package/@playwright/mcp",
+  },
+  filesystem: {
+    label: "文件系统",
+    labelEn: "File System",
+    description: "安全的文件读写操作（默认访问用户目录）",
+    descriptionEn: "Secure file read/write (defaults to user home)",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem"],
+    env: {},
+    docs: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+  },
+});
+
 class McpManager {
   constructor() {
     /** @type {Object<string, {process: import("child_process").ChildProcess|null, config: object, tools: Array, status: string, error: string|null, buffer: string}>} */
@@ -22,6 +49,8 @@ class McpManager {
     /** @type {Map<number, {resolve: Function, reject: Function, timer: NodeJS.Timeout, serverName: string}>} */
     this._pending = new Map();
     this._nextId = 0;
+    /** @type {Object<string, boolean>} */
+    this._builtinState = {};
   }
 
   // ── Config persistence ──────────────────────────────────────
@@ -33,12 +62,13 @@ class McpManager {
   loadConfig() {
     try {
       if (existsSync(this.getStorePath())) {
-        return JSON.parse(readFileSync(this.getStorePath(), "utf-8"));
+        const cfg = JSON.parse(readFileSync(this.getStorePath(), "utf-8"));
+        return cfg;
       }
     } catch (e) {
       console.error("[mcp] Failed to load config:", e.message);
     }
-    return { servers: {} };
+    return { servers: {}, builtins: {} };
   }
 
   saveConfig(config) {
@@ -56,6 +86,7 @@ class McpManager {
   /** Start all enabled servers. Called once on app startup. */
   async init() {
     const config = this.loadConfig();
+    this._builtinState = config.builtins || {};
     const promises = [];
     for (const [name, cfg] of Object.entries(config.servers || {})) {
       if (cfg.enabled !== false) {
@@ -64,6 +95,18 @@ class McpManager {
         promises.push(
           starter.catch(e => {
             console.error(`[mcp] Failed to start "${name}":`, e.message);
+          })
+        );
+      }
+    }
+    // Start enabled builtin servers
+    for (const [name, definition] of Object.entries(BUILTIN_SERVERS)) {
+      if (this._builtinState[name] !== false) {
+        console.log(`[mcp] Starting builtin "${name}"...`);
+        const cfg = { command: definition.command, args: [...definition.args], env: { ...definition.env } };
+        promises.push(
+          this.startServer(name, cfg).catch(e => {
+            console.error(`[mcp] Failed to start builtin "${name}":`, e.message);
           })
         );
       }
@@ -459,6 +502,50 @@ class McpManager {
       }
     }
     throw new Error(`MCP tool "${name}" not found in any running server`);
+  }
+
+  // ── Built-in servers ────────────────────────────────────────
+
+  /** Get definitions and state of all built-in servers. */
+  getBuiltins() {
+    const results = [];
+    for (const [name, def] of Object.entries(BUILTIN_SERVERS)) {
+      const running = this.servers[name];
+      results.push({
+        name,
+        label: def.label,
+        labelEn: def.labelEn,
+        description: def.description,
+        descriptionEn: def.descriptionEn,
+        enabled: this._builtinState[name] !== false,
+        running: running?.status === "running",
+        status: running?.status || "stopped",
+        error: running?.error || null,
+        docs: def.docs,
+        tools: running?.tools?.map(t => ({ name: t.name, description: t.description })) || [],
+      });
+    }
+    return results;
+  }
+
+  /** Enable or disable a built-in server. */
+  async toggleBuiltin(name, enabled) {
+    if (!BUILTIN_SERVERS[name]) {
+      throw new Error(`Unknown builtin server "${name}"`);
+    }
+    this._builtinState[name] = enabled;
+    // Persist state to config
+    const config = this.loadConfig();
+    config.builtins = { ...this._builtinState };
+    this.saveConfig(config);
+
+    if (enabled) {
+      const def = BUILTIN_SERVERS[name];
+      const cfg = { command: def.command, args: [...def.args], env: { ...def.env } };
+      await this.startServer(name, cfg);
+    } else {
+      await this.stopServer(name);
+    }
   }
 }
 

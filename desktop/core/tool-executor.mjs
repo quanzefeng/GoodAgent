@@ -12,6 +12,7 @@ import * as skills from "../skills-store.mjs";
 import * as kb from "../knowledge-store.mjs";
 import mcpManager from "../mcp-manager.mjs";
 import { scanSkills } from "./skill-scanner.mjs";
+import { searchMeta } from "../search-engine/index.mjs";
 import * as hookManager from "./hook-manager.mjs";
 import {
   SHELL, IS_WINDOWS, getWorkspace, MAX_OUTPUT, DANGEROUS, GIT_SAFE, GH_SAFE,
@@ -263,11 +264,11 @@ export async function runTool(tc) {
       try {
         const maxRes = Math.min(args.max_results || 5, 10);
         const query = args.query;
-
-        // Default to Tavily unless user explicitly chose DuckDuckGo
         const savedPref = readSearchProviderPref();
-        const searchProvider = savedPref === "duckduckgo" ? "duckduckgo" : "tavily";
-        if (searchProvider === "tavily") {
+        const provider = savedPref || "tavily";
+
+        // ── Tavily (paid, needs API key) ───────────────────────
+        if (provider === "tavily") {
           let tavilyKey = process.env.TAVILY_API_KEY;
           if (!tavilyKey) {
             try {
@@ -293,23 +294,17 @@ export async function runTool(tc) {
               return { query, provider: "tavily", results: data.results?.map(r => ({ title: r.title, url: r.url, content: r.content, score: r.score })) || [] };
             }
           }
+          // Tavily unavailable → fall through to metasearch
         }
 
-        // DuckDuckGo fallback (free, no API key required)
-        const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1`;
-        const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(10000) });
-        if (!ddgRes.ok) return { error: `DuckDuckGo search failed: ${ddgRes.status}` };
-        const ddgData = await ddgRes.json();
-        const results = [];
-        if (ddgData.AbstractText) {
-          results.push({ title: ddgData.Heading || "Abstract", url: ddgData.AbstractURL || "", content: ddgData.AbstractText });
-        }
-        for (const topic of (ddgData.RelatedTopics || []).slice(0, maxRes)) {
-          if (topic.Text) {
-            results.push({ title: topic.FirstURL ? "" : "", url: topic.FirstURL || "", content: topic.Text });
-          }
-        }
-        return { query, provider: "duckduckgo", results: results.slice(0, maxRes) };
+        // ── Meta-search (free, Bing + DDG + GitHub, no API key) ──
+        const meta = await searchMeta(query, maxRes);
+        return {
+          query: meta.query,
+          provider: "metasearch",
+          results: meta.results,
+          ...(meta._warnings ? { _note: meta._warnings } : {}),
+        };
       } catch (e) { return { error: e.message }; }
     }
     case "skill": {
