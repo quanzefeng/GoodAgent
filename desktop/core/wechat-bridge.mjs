@@ -12,6 +12,9 @@ import {
   getWxBotToken, setWxBotToken, getWxBotId, setWxBotId,
   getWxUserId, setWxUserId, getWxPollAbort, setWxPollAbort,
   getLastApiConfig, sendToRenderer,
+  getHistory, setHistory,
+  getSessionId, setSessionId,
+  getAbortCtrl, setAbortCtrl,
 } from "./state.mjs";
 
 function randomWxUin() {
@@ -163,14 +166,30 @@ async function generateWxReply(prompt) {
 
   if (!apiKey || !apiUrl) return "请先在桌面端发送一条消息激活 API，或重新扫码登录";
 
+  // ── Save desktop session state before WeChat processing ──
+  const savedHistory = [...getHistory()];
+  const savedSessionId = getSessionId();
+  const savedAbortCtrl = getAbortCtrl();
+
+  // Set up isolated state for WeChat
+  setAbortCtrl(new AbortController());
+  setSessionId(null);
+  setHistory([]);
+
   // Lazy import to avoid circular dependency
-  const { agentLoop } = await import("./agent-loop.mjs");
+  const { agentLoop, resetPromptCache } = await import("./agent-loop.mjs");
   try {
-    const result = await agentLoop(prompt, apiKey, apiUrl, model, apiFormat, [], [], false, "");
+    const result = await agentLoop(prompt, apiKey, apiUrl, model, apiFormat, [], [], false, "", undefined, false, true, true);
     return result.text || "";
   } catch (err) {
     console.error("[wechat] agentLoop error:", err.message);
     return `[出错: ${err.message}]`;
+  } finally {
+    // ── Restore desktop session state ──
+    setHistory(savedHistory);
+    setSessionId(savedSessionId);
+    setAbortCtrl(savedAbortCtrl);
+    resetPromptCache();
   }
 }
 

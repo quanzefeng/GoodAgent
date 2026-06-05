@@ -116,12 +116,13 @@ KNOWLEDGE: <内容>
   }
 }
 
-export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false, isPlanMode = false, webSearchEnabled = true) {
+export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "openai", files = [], enabledSkills, reasoning = true, agentName, kbEnabled = false, isPlanMode = false, webSearchEnabled = true, silent = false) {
   let abortCtrl = getAbortCtrl();
   if (abortCtrl) abortCtrl.abort();
   abortCtrl = new AbortController();
   setAbortCtrl(abortCtrl);
   const { signal } = abortCtrl;
+  const sdr = (...args) => { if (!silent) sendToRenderer(...args); };
 
   let sessionId = getSessionId();
   if (!sessionId) { sessionId = genId(); setSessionId(sessionId); }
@@ -132,7 +133,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
   const placeholderTitle = (prompt || "").replace(/[\r\n]+/g, " ").trim().slice(0, 60) || "新对话";
   const placeholderHistory = [{ role: "user", content: prompt || "" }];
   await sessionDb.saveSession(sessionId, placeholderHistory, placeholderTitle);
-  sendToRenderer("session:update", { sessionId });
+  sdr("session:update", { sessionId });
 
   // ── Build user message with optional file attachments ──
   let userMessage;
@@ -185,7 +186,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
     // ── L0 token budget check (system content only) ──
     const estTokens = estimateTokens(sysContent);
     if (estTokens > TOKEN_BUDGET_WARN) {
-      sendToRenderer("l0:budget", {
+      sdr("l0:budget", {
         estimatedTokens: estTokens,
         warnThreshold: TOKEN_BUDGET_WARN,
         hardThreshold: TOKEN_BUDGET_HARD,
@@ -293,7 +294,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
     if (continuation > 1) {
       const banner = `\n\n--- 第 ${continuation} 次自动继续 ---\n`;
       allText += banner;
-      sendToRenderer("stream:chunk", { content: banner });
+      sdr("stream:chunk", { content: banner });
     }
 
     while (turns < MAX_TURNS) {
@@ -327,7 +328,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
             const miss = u.prompt_cache_miss_tokens ?? 0;
             const pct = total > 0 ? Math.round(u.prompt_cache_hit_tokens / total * 100) : 0;
             console.log(`[cache] hit=${u.prompt_cache_hit_tokens} miss=${miss} total=${total} rate=${pct}%`);
-            sendToRenderer("stream:metrics", {
+            sdr("stream:metrics", {
               hit: u.prompt_cache_hit_tokens, miss, total, rate: pct,
             });
           } else if (u.cache_read_input_tokens !== undefined) {
@@ -337,7 +338,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
             const miss = total - read;
             const pct = total > 0 ? Math.round(read / total * 100) : 0;
             console.log(`[cache] read=${read} created=${created} total=${total} rate=${pct}%`);
-            sendToRenderer("stream:metrics", {
+            sdr("stream:metrics", {
               hit: read, miss, total, rate: pct,
             });
           }
@@ -365,7 +366,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
         for (const tc of agentCalls) {
           let args;
           try { args = JSON.parse(tc.function.arguments); } catch { args = { raw: tc.function.arguments }; }
-          sendToRenderer("tool:start", { name: "Agent", args });
+          sdr("tool:start", { name: "Agent", args });
         }
 
         const agentResults = await Promise.allSettled(
@@ -380,7 +381,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
             : { error: settled.reason?.message || "Sub-agent failed" };
           let rStr = JSON.stringify(result);
           if (rStr.length > MAX_OUTPUT) rStr = rStr.slice(0, MAX_OUTPUT) + "\n...(truncated)";
-          sendToRenderer("tool:result", { name: "Agent", result });
+          sdr("tool:result", { name: "Agent", result });
           msgs.push({ role: "tool", tool_call_id: tc.id, content: rStr });
           hookManager.fire("PostToolUse", { tool: "Agent", result }).catch(() => {});
         }
@@ -389,14 +390,14 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
       for (const tc of otherCalls) {
         let args;
         try { args = JSON.parse(tc.function.arguments); } catch { args = { raw: tc.function.arguments }; }
-        sendToRenderer("tool:start", { name: tc.function.name, args });
+        sdr("tool:start", { name: tc.function.name, args });
 
         let result;
         try { result = await runTool(tc); } catch (e) { result = { error: e.message }; }
 
         let rStr = JSON.stringify(result);
         if (rStr.length > MAX_OUTPUT) rStr = rStr.slice(0, MAX_OUTPUT) + "\n...(truncated)";
-        sendToRenderer("tool:result", { name: tc.function.name, result });
+        sdr("tool:result", { name: tc.function.name, result });
         msgs.push({ role: "tool", tool_call_id: tc.id, content: rStr });
         hookManager.fire("PostToolUse", { tool: tc.function.name, result }).catch(() => {});
       }
@@ -406,7 +407,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
 
     // ── Continuation: summarize and compress ──
     if (continuation < MAX_CONTINUATIONS) {
-      sendToRenderer("context:continuation-start", { continuation, max: MAX_CONTINUATIONS });
+      sdr("context:continuation-start", { continuation, max: MAX_CONTINUATIONS });
 
       const summary = await summarizeForContinuation(msgs, apiKey, apiUrl, model, apiFormat);
 
@@ -417,7 +418,7 @@ export async function agentLoop(prompt, apiKey, apiUrl, model, apiFormat = "open
       msgs = [sysMsg, continuationMsg, ...recentMsgs];
       if (_contextMsg) msgs.push(_contextMsg);
 
-      sendToRenderer("context:continuation-done", {
+      sdr("context:continuation-done", {
         continuation,
         max: MAX_CONTINUATIONS,
         summaryTokens: estimateTokens(summary),
@@ -528,4 +529,9 @@ ${convText}
   hookManager.fire("SessionEnd", { sessionId: finalSessionId, aborted: false }).catch(() => {});
   autoReview(msgs, apiKey, apiUrl, model, apiFormat).catch(() => {});
   return { text: allText || "(no text response)" };
+}
+
+export function resetPromptCache() {
+  _sysPromptCache = null;
+  _contextBlockBaseCache = null;
 }

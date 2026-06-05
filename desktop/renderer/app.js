@@ -987,6 +987,7 @@ function resetChat() {
   if (state.isStreaming) {
     // Don't abort — hold streaming DOM, show welcome
     holdStreamingDom();
+    state.isStreaming = false;
     // Reset backend session so next query starts fresh
     window.goodAgent.resetSession();
     _loadedSessionId = null;
