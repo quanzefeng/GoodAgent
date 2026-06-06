@@ -280,7 +280,10 @@ document.querySelector('.settings-tab[data-tab="skills"]')?.addEventListener("cl
   if (listEl && (listEl.children.length === 0 || listEl.querySelector(".skills-empty, .skills-loading"))) loadAndRenderSkills();
 });
 
-document.querySelector('.settings-tab[data-tab="agent-skills"]')?.addEventListener("click", () => loadCuratorConfig());
+document.querySelector('.settings-tab[data-tab="agent-skills"]')?.addEventListener("click", async () => {
+  await loadSkillsPanel();
+  loadCuratorConfig();
+});
 
 document.getElementById("curator-save-btn")?.addEventListener("click", async () => {
   const input = document.getElementById("curator-days-input");
