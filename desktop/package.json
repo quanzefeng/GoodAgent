@@ -5,6 +5,7 @@
   "repository": "https://github.com/quanzefeng/AideAgent",
   "author": "quanzefeng <quanzefeng@gmail.com>",
   "homepage": "https://github.com/quanzefeng/AideAgent",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "main.mjs",
   "scripts": {
@@ -97,3 +98,4 @@
     "qrcode": "^1.5.4"
   }
 }
+
