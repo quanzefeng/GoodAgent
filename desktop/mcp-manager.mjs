@@ -36,7 +36,7 @@ const BUILTIN_SERVERS = Object.freeze({
     description: "安全的文件读写操作（默认访问用户目录）",
     descriptionEn: "Secure file read/write (defaults to user home)",
     command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem"],
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "C:\\", "D:\\"],
     env: {},
     docs: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
   },
