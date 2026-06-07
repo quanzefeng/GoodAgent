@@ -124,6 +124,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span data-i18n="settings.agent_skills">Agent 技能</span>
           </div>
+          <div class="settings-tab" data-tab="appearance">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>
+            <span data-i18n="settings.appearance">外观</span>
+          </div>
           <div class="settings-tab" data-tab="font">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
             <span data-i18n="settings.font">字体</span>
@@ -538,6 +542,72 @@
                 <option value="'Noto Serif SC', 'Source Han Serif SC', serif" data-i18n="font.serif">思源宋体</option>
               </select>
               <p class="hint" data-i18n="font.hint">修改后立即生效，影响所有对话消息和思考过程的显示字体</p>
+            </div>
+          </div>
+
+          <!-- 外观 Panel -->
+          <div class="settings-panel" id="panel-appearance">
+            <div class="bg-settings">
+              <h3 class="section-title" data-i18n="bg.title">主题外观</h3>
+
+              <div class="form-row" style="margin-top:14px;">
+                <label class="form-label" data-i18n="bg.preset_label">预设主题</label>
+                <div id="bg-preset-grid" class="bg-preset-grid"></div>
+              </div>
+
+              <div class="form-row" style="margin-top:18px;">
+                <label class="form-label" data-i18n="bg.custom_label">自定义背景色</label>
+                <div class="bg-color-picker-2d">
+                  <div class="bg-color-sl-wrap">
+                    <canvas id="bg-color-square" class="bg-color-square" width="220" height="150"></canvas>
+                    <div id="bg-color-sl-indicator" class="bg-color-indicator"></div>
+                  </div>
+                  <div class="bg-color-hue-wrap">
+                    <canvas id="bg-color-hue-bar" class="bg-color-hue-bar" width="18" height="150"></canvas>
+                    <div id="bg-color-hue-indicator" class="bg-color-hue-indicator"></div>
+                  </div>
+                </div>
+                <div class="bg-color-preview-row">
+                  <span data-i18n="bg.color_picker_current">当前选择</span>
+                  <span id="bg-color-pending-hex" class="bg-color-hex-text">#faf6ef</span>
+                  <span id="bg-color-pending-preview" class="bg-color-swatch"></span>
+                </div>
+                <div class="bg-color-actions">
+                  <button id="bg-color-apply-btn" class="btn bg-color-apply-btn" data-i18n="bg.color_picker_apply">应用</button>
+                </div>
+              </div>
+
+              <div class="form-row" style="margin-top:14px;">
+                <label class="form-label">
+                  <span data-i18n="bg.brightness_label">亮度调节</span>
+                  <span id="bg-brightness-value" style="margin-left:8px;color:var(--text-light);font-family:var(--font-mono);font-size:12px;">100%</span>
+                </label>
+                <input type="range" id="bg-brightness-slider" class="bg-brightness-slider" min="60" max="120" value="100" step="1" />
+              </div>
+
+              <div class="form-row" style="margin-top:14px;">
+                <label class="form-label" data-i18n="bg.accent_label">强调色</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="color" id="bg-accent-picker" class="bg-color-picker" />
+                  <input type="text" id="bg-accent-hex" class="form-input" placeholder="#f59e0b" style="flex:1;font-family:var(--font-mono);text-transform:lowercase;" />
+                </div>
+              </div>
+
+              <p class="hint" style="margin-top:14px;" data-i18n="bg.hint">点击预设或拖动滑杆实时生效；推荐使用预设以保证文字对比度</p>
+
+              <div class="form-row" style="margin-top:14px;">
+                <label class="form-label" data-i18n="bg.preview_label">实时预览</label>
+                <div id="bg-preview" class="bg-preview">
+                  <div class="bg-preview-card">
+                    <div class="bg-preview-bubble" data-i18n="bg.preview_msg">这是一条示例消息，用于预览主题效果</div>
+                    <div class="bg-preview-bubble user" data-i18n="bg.preview_user">用户消息气泡预览</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:18px;display:flex;justify-content:flex-end;">
+                <button id="bg-reset-btn" class="btn" data-i18n="bg.reset">恢复默认</button>
+              </div>
             </div>
           </div>
 

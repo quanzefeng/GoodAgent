@@ -40,6 +40,17 @@ const BUILTIN_SERVERS = Object.freeze({
     env: {},
     docs: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
   },
+  "computer-use": {
+    label: "桌面控制",
+    labelEn: "Computer Use",
+    description: "AI 桌面操控（截图、点击、键盘输入等），基于系统无障碍 API",
+    descriptionEn: "Desktop control via accessibility APIs — screenshots, clicks, keyboard input",
+    command: "npx",
+    args: ["-y", "open-computer-use@0.1.52", "mcp"],
+    env: {},
+    docs: "https://github.com/iFurySt/open-codex-computer-use",
+    defaultEnabled: false,
+  },
 });
 
 class McpManager {
@@ -101,7 +112,10 @@ class McpManager {
     }
     // Start enabled builtin servers
     for (const [name, definition] of Object.entries(BUILTIN_SERVERS)) {
-      if (this._builtinState[name] !== false) {
+      // defaultEnabled: false = opt-in, only start if user explicitly enabled
+      const state = this._builtinState[name];
+      const shouldStart = definition.defaultEnabled === false ? state === true : state !== false;
+      if (shouldStart) {
         console.log(`[mcp] Starting builtin "${name}"...`);
         const cfg = { command: definition.command, args: [...definition.args], env: { ...definition.env } };
         promises.push(

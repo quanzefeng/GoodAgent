@@ -659,6 +659,245 @@ html, body {
   margin-bottom: 6px;
 }
 
+/* ========================================
+   外观 / 主题 (Appearance Panel)
+   ======================================== */
+.bg-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bg-settings .section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: var(--text);
+}
+
+/* 预设色板网格 */
+.bg-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 6px;
+}
+.bg-preset-swatch {
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  cursor: pointer;
+  background: var(--bg-card);
+  transition: all var(--duration-fast) var(--ease-out);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: center;
+  user-select: none;
+}
+.bg-preset-swatch:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+.bg-preset-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.bg-preset-colors {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bg-preset-colors > div {
+  flex: 1;
+}
+
+/* 颜色选择器（input[type=color]，强调色用） */
+.bg-color-picker {
+  width: 48px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: 2px;
+  cursor: pointer;
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+.bg-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.bg-color-picker::-webkit-color-swatch { border: none; border-radius: 4px; }
+.bg-color-picker::-moz-color-swatch { border: none; border-radius: 4px; }
+
+/* ── 2D 色板（背景色自定义） ── */
+.bg-color-picker-2d {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  margin-top: 6px;
+}
+.bg-color-sl-wrap {
+  position: relative;
+  flex: 1;
+  height: 150px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  overflow: hidden;
+  cursor: crosshair;
+  user-select: none;
+}
+.bg-color-square {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.bg-color-indicator {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.2);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.bg-color-hue-wrap {
+  position: relative;
+  width: 18px;
+  height: 150px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  overflow: hidden;
+  cursor: ew-resize;
+  flex-shrink: 0;
+  user-select: none;
+}
+.bg-color-hue-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.bg-color-hue-indicator {
+  position: absolute;
+  left: -3px;
+  width: 24px;
+  height: 4px;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.6);
+  border-radius: 2px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  box-shadow: 0 0 3px rgba(0,0,0,0.3);
+}
+.bg-color-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-light);
+}
+.bg-color-hex-text {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.bg-color-swatch {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #ffffff;
+  margin-left: auto;
+}
+.bg-color-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+.bg-color-apply-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 6px 22px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.bg-color-apply-btn:hover { opacity: 0.85; }
+.bg-color-apply-btn:active { opacity: 0.7; }
+
+/* 亮度滑杆 */
+.bg-brightness-slider {
+  width: 100%;
+  margin: 8px 0 0 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.bg-brightness-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.bg-brightness-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* 实时预览 */
+.bg-preview {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px;
+  margin-top: 6px;
+  transition: background var(--duration-slow) var(--ease-out);
+}
+.bg-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bg-preview-bubble {
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  align-self: flex-start;
+  max-width: 80%;
+  transition: all var(--duration-slow) var(--ease-out);
+}
+.bg-preview-bubble.user {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.2);
+  align-self: flex-end;
+}
+
 /* User message avatar (right side of label) */
 .user-msg-avatar {
   width: 32px;

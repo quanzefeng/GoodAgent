@@ -1,5 +1,6 @@
 /* ── Import modules ───────────────────────────────────── */
 import './modules/font-settings.mjs';
+import './modules/bg-settings.mjs';
 import './modules/workspace.mjs';
 import { initKnowledgeBase } from './modules/knowledge-base.mjs';
 import { initMemoryPanel } from './modules/memory-panel.mjs';
