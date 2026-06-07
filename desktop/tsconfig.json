@@ -4,8 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": false,
+    "noImplicitAny": false,
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "outDir": "./dist",
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,6 +16,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["core/**/*", "*.mjs"],
-  "exclude": ["node_modules", "renderer/**", "test/**", "dist/**"]
+  "include": ["core/**/*", "*.mjs", "preload.cjs", "renderer/**/*"],
+  "exclude": ["node_modules", "test/**", "test-results/**", "playwright-report/**", "dist/**", "models/**", "release/**", "scripts/**"]
 }

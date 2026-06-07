@@ -141,6 +141,15 @@ async function getBumpVersion() {
   return _bumpVersion;
 }
 
+/**
+ * Dispatch a single tool call to the appropriate handler.
+ *
+ * @param {{ function: { name: string; arguments: string } }} tc - Tool call object
+ *   from LLM response (OpenAI `tool_calls[i]` shape).
+ * @returns {Promise<any>} Tool-specific result. Shape varies per tool name.
+ *   Common shapes: `{ content: string }` (text), `{ error: string }` (failure),
+ *   `{ [key: string]: any }` (structured data). Callers should handle `error` keys.
+ */
 export async function runTool(tc) {
   const { name, arguments: argsStr } = tc.function;
   const args = JSON.parse(argsStr);
@@ -338,7 +347,9 @@ export async function runTool(tc) {
     }
     case "invoke_skill": {
       try {
-        let skill = skills.loadSkill(args.name);
+        // skills.loadSkill returns the full meta (name, body, description, etc.) but
+        // TS infers a narrow shape — cast to any for the union with scanSkills' shape.
+        let skill = /** @type {any} */ (skills.loadSkill(args.name));
         // Fallback to L3 installed skills
         if (!skill) {
           const installedSkills = scanSkills();
@@ -357,7 +368,9 @@ export async function runTool(tc) {
     case "create_skill": {
       try {
         const { name, description, prompt } = args;
-        const existing = skills.loadSkill(name);
+        // skills.loadSkill returns full meta (triggers, version, created_at) but
+        // TS infers a narrow shape — cast to any for accessing the full fields.
+        const existing = /** @type {any} */ (skills.loadSkill(name));
         const loadWxConfig = await getLoadWxConfig();
         const cfg = loadWxConfig();
         const apiConfig = getLastApiConfig();

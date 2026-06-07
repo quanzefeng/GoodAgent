@@ -110,7 +110,16 @@ app.whenReady().then(async () => {
     callback({ responseHeaders: headers });
   });
 
-  mcpManager.init().catch(e => console.error("[main] mcpManager.init error:", e.message));
+  // ── TEST_MODE 短路：跳过 MCP/WeChat 等慢启动子进程 ──
+  // 由 Playwright/手动测试设置 AIDEAGENT_TEST_MODE=1
+  // 不启动 MCP（edge-browser 等子进程）和 WeChat bot —— 这俩在 app.quit() 时不会优雅退出
+  // 拖住 Playwright worker teardown 30-60s
+  const isTestMode = process.env.AIDEAGENT_TEST_MODE === "1";
+  if (isTestMode) console.log("[main] TEST_MODE: skipping MCP init + WeChat autostart");
+
+  if (!isTestMode) {
+    mcpManager.init().catch(e => console.error("[main] mcpManager.init error:", e.message));
+  }
 
   try { sessionDb.migrateFromJson(join(app.getPath("userData"), "sessions")); } catch { /* ignored */ }
 
@@ -131,7 +140,9 @@ app.whenReady().then(async () => {
   // Register all IPC handlers
   registerIpcHandlers();
   registerWechatIpc();
-  autoStartWechat();
+  if (!isTestMode) {
+    autoStartWechat();
+  }
 });
 
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

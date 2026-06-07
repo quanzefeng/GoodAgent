@@ -1,3 +1,7 @@
+// @ts-nocheck — this 2872-line monolith will be split into focused modules
+// in the refactor step. Adding JSDoc here would be wasted effort.
+// @ts-nocheck — 这个 2872 行的单片文件会在重构步骤拆分为聚焦模块。
+//              在这里加 JSDoc 是浪费工作。
 /* ── Import modules ───────────────────────────────────── */
 import './modules/font-settings.mjs';
 import './modules/bg-settings.mjs';
@@ -7,6 +11,9 @@ import { initMemoryPanel } from './modules/memory-panel.mjs';
 import { loadAgentName, loadUserName, applyAgentName, applyUserName, initAgentNameUI, initUserAvatarUI, loadUserAvatarSrc } from './modules/agent-name.mjs';
 import { sanitize, renderMarkdown, renderLatexInElement, autoResize, formatFileSize, scrollToBottom, setStatus, loadReasoningEnabled, saveReasoningEnabled } from './modules/helpers.mjs';
 import { loadEnabledSkills } from './modules/skills-panel.mjs';
+import { switchSettingsTab, initSettingsTabs } from './modules/settings-tabs.mjs';
+import { createFilePreviews } from './modules/file-previews.mjs';
+import { createPromptStore } from './modules/prompt-store.mjs';
 
 /* ── Configure marked.js ──────────────────────────────── */
 marked.setOptions({
@@ -116,91 +123,24 @@ const USER_NAME_KEY = "AideAgent_user_name";
 /* ── File upload ──────────────────────────────── */
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
-function fileIconSvg(type, name) {
-  // Images show a thumbnail
-  if (type.startsWith("image/")) return ""; // handled in render
-  // File type icons
-  const ext = name.split(".").pop().toLowerCase();
-  const icons = {
-    pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
-    json: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="9" y="18" font-size="10" fill="currentColor">{ }</text></svg>',
-    js:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="8" y="18" font-size="12" fill="currentColor">JS</text></svg>',
-  };
-  return icons[ext] || '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
-}
-
-function renderFilePreviews() {
-  const files = state.attachedFiles;
-  if (files.length === 0) {
-    filePreviewArea.classList.add("hidden");
-    filePreviewArea.innerHTML = "";
-    return;
-  }
-  filePreviewArea.classList.remove("hidden");
-  filePreviewArea.innerHTML = files.map((f, i) => {
-    const isImg = f.type.startsWith("image/");
-    const iconHtml = isImg
-      ? `<img src="${f.dataUrl}" alt="" />`
-      : fileIconSvg(f.type, f.name);
-    return `<div class="file-chip">
-      <span class="file-chip-icon">${iconHtml}</span>
-      <span class="file-chip-name" title="${f.name.replace(/"/g, "&quot;")}">${f.name.replace(/</g, "&lt;")}</span>
-      <span class="file-chip-size">${formatFileSize(f.size)}</span>
-      <button class="file-chip-remove" data-index="${i}" data-i18n-title="file.remove" title="移除">✕</button>
-    </div>`;
-  }).join("");
-
-  // Bind remove buttons
-  filePreviewArea.querySelectorAll(".file-chip-remove").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.index, 10);
-      state.attachedFiles.splice(idx, 1);
-      renderFilePreviews();
-      updateSendButton();
-    });
-  });
-}
-
-function updateSendButton() {
-  sendBtn.disabled = !promptInput.value.trim() && state.attachedFiles.length === 0;
-}
-
-async function handleFileUpload(files) {
-  if (!files || files.length === 0) return;
-  for (const file of files) {
-    if (file.size > MAX_FILE_SIZE) {
-      addErrorMessage(t("file.too_large", { name: file.name }));
-      continue;
-    }
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      state.attachedFiles.push({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        dataUrl,
-      });
-    } catch (e) {
-      console.error("Failed to read file:", file.name, e);
-    }
-  }
-  renderFilePreviews();
-  updateSendButton();
-}
-
-// Upload button click → open file picker
-uploadBtn.addEventListener("click", () => fileInput.click());
-
-// File input change → handle selection
-fileInput.addEventListener("change", () => {
-  handleFileUpload(fileInput.files);
-  fileInput.value = ""; // allow re-selecting same files
+// File previews extracted to modules/file-previews.mjs (Step 3c).
+// The state, DOM refs, and callbacks are passed via createFilePreviews({...}).
+// 已提取到 modules/file-previews.mjs（Step 3c）。state、DOM 引用和回调通过
+// createFilePreviews({...}) 注入。
+const filePreviews = createFilePreviews({
+  state,
+  filePreviewArea,
+  fileInput,
+  uploadBtn,
+  sendBtn,
+  promptInput,
+  MAX_FILE_SIZE,
+  onError: (msg) => addErrorMessage(t(msg)),
+  formatFileSize,
 });
+const renderFilePreviews = filePreviews.renderFilePreviews;
+const updateSendButton = filePreviews.updateSendButton;
+const handleFileUpload = filePreviews.handleFileUpload;
 
 
 /* ── Update info bar (model name + reasoning state) ── */
@@ -2187,239 +2127,19 @@ document.getElementById("mcp-detect-btn")?.addEventListener("click", () => {
 });
 
 /* ── System Prompt Profile Management ─────────────────── */
-let promptStore = null;
-let currentProfileId = null;
-let _promptDirty = false;
-
-function getNextProfileName() {
-  if (!promptStore) return t("prompt.created", {num: 1});
-  const ids = Object.keys(promptStore.profiles);
-  let max = 0;
-  for (const id of ids) {
-    const p = promptStore.profiles[id];
-    const m = p.name && p.name.match(/(\d+)$/);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > max) max = n;
-    }
-  }
-  return t("prompt.created", {num: max + 1});
-}
-
-async function loadPromptStore() {
-  try {
-    promptStore = await window.aideagent.listPromptProfiles();
-    if (!promptStore || !promptStore.profiles) {
-      promptStore = { activeProfile: "default", profiles: {} };
-    }
-    currentProfileId = promptStore.activeProfile || "default";
-    // Ensure default profile exists
-    if (!promptStore.profiles["default"]) {
-      promptStore.profiles["default"] = {
-        id: "default", name: t("prompt.default"), enabled: true,
-        content: await window.aideagent.getDefaultPrompt(),
-      };
-    }
-    return promptStore;
-  } catch (e) {
-    console.error("[prompt] Failed to load profiles:", e);
-    return null;
-  }
-}
-
-function getCurrentProfile() {
-  if (!promptStore || !promptStore.profiles) return null;
-  return promptStore.profiles[currentProfileId] || null;
-}
-
-function renderProfileName(p, id) {
-  // Default profile always uses t("prompt.default") dynamically
-  if (id === "default") return sanitize(t("prompt.default"));
-  // Check if name matches auto-generated pattern (e.g. "系统提示词1" / "System Prompt 1")
-  const m = p.name && p.name.match(/^(系统提示词|System Prompt)\s*(\d+)$/i);
-  if (m) return sanitize(t("prompt.created", {num: parseInt(m[2], 10)}));
-  // Custom profile names displayed as-is
-  return sanitize(p.name);
-}
-
-function renderProfileSelector() {
-  const container = document.getElementById("prompt-profile-selector");
-  if (!container || !promptStore) return;
-  const ids = Object.keys(promptStore.profiles);
-  container.innerHTML = ids.map(id => {
-    const p = promptStore.profiles[id];
-    const active = id === currentProfileId ? " active" : "";
-    return `<button class="prompt-profile-chip${active}" data-profile-id="${id}">
-      ${renderProfileName(p, id)}
-    </button>`;
-  }).join("");
-
-  // Bind click
-  container.querySelectorAll(".prompt-profile-chip").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const id = btn.dataset.profileId;
-      if (id === currentProfileId) return;
-      if (_promptDirty) await saveCurrentProfile();
-      currentProfileId = id;
-      promptStore.activeProfile = id;
-      await window.aideagent.activatePromptProfile(id);
-      renderProfileSelector();
-      renderPromptEditor();
-    });
-  });
-}
-
-async function saveCurrentProfile() {
-  const profile = getCurrentProfile();
-  if (!profile) return;
-  // Read name input
-  const nameInput = document.getElementById("prompt-name-input");
-  if (nameInput && nameInput.value.trim()) {
-    profile.name = nameInput.value.trim();
-  }
-  await window.aideagent.savePromptProfile(profile);
-  _promptDirty = false;
-  // Re-render selector to reflect any name change
-  renderProfileSelector();
-  showPromptStatus(t("prompt.saved"), "success");
-}
-
-function htmlEncode(str) {
-  const div = document.createElement("div");
-  div.appendChild(document.createTextNode(str));
-  return div.innerHTML;
-}
-
-function renderPromptEditor() {
-  const container = document.getElementById("prompt-sections");
-  const profile = getCurrentProfile();
-  if (!container || !profile) {
-    if (container) container.innerHTML = '<p class="hint" style="margin:24px 0;">' + t("prompt.empty_hint") + '</p>';
-    return;
-  }
-
-  container.innerHTML = `
-    <div class="prompt-editor-name">
-      <label class="prompt-editor-name-label">${t("prompt.name")}</label>
-      <input type="text" id="prompt-name-input" class="form-input prompt-name-input" value="${htmlEncode(profile.name)}" placeholder="${t("prompt.name")}" />
-    </div>
-    <div class="prompt-single-box">
-      <textarea id="prompt-content-area" class="prompt-content-textarea" placeholder="${t("prompt.placeholder")}">${htmlEncode(profile.content || "")}</textarea>
-    </div>
-    <div class="prompt-editor-bottom">
-      <button id="prompt-enable-btn" class="btn prompt-enable-btn ${profile.enabled ? "prompt-enable-btn--on" : "prompt-enable-btn--off"}">
-        ${profile.enabled ? t("prompt.enabled") : t("prompt.enable")}
-      </button>
-      <div class="prompt-editor-right">
-        <button id="prompt-delete-btn" class="btn prompt-delete-btn" ${currentProfileId === "default" ? "disabled" : ""}>${t("common.delete")}</button>
-        <button id="prompt-save-btn" class="btn primary">${t("common.save")}</button>
-      </div>
-    </div>
-  `;
-
-  // ── Bind events ──
-
-  // Name input
-  const nameInput = document.getElementById("prompt-name-input");
-  if (nameInput) {
-    nameInput.addEventListener("input", () => { _promptDirty = true; });
-  }
-
-  // Content textarea
-  const contentArea = document.getElementById("prompt-content-area");
-  if (contentArea) {
-    contentArea.addEventListener("input", () => {
-      const p = getCurrentProfile();
-      if (p) p.content = contentArea.value;
-      _promptDirty = true;
-    });
-  }
-
-  // Enable button
-  const enableBtn = document.getElementById("prompt-enable-btn");
-  if (enableBtn) {
-    enableBtn.addEventListener("click", async () => {
-      const p = getCurrentProfile();
-      if (!p) return;
-      if (nameInput && nameInput.value.trim()) p.name = nameInput.value.trim();
-      p.enabled = true;
-      for (const id of Object.keys(promptStore.profiles)) {
-        if (id !== currentProfileId) promptStore.profiles[id].enabled = false;
-      }
-      for (const id of Object.keys(promptStore.profiles)) {
-        await window.aideagent.savePromptProfile(promptStore.profiles[id]);
-      }
-      _promptDirty = false;
-      renderProfileSelector();
-      renderPromptEditor();
-      showPromptStatus(t("prompt.enabled_now"), "success");
-    });
-  }
-
-  // Delete button
-  const deleteBtn = document.getElementById("prompt-delete-btn");
-  if (deleteBtn) {
-    deleteBtn.addEventListener("click", async () => {
-      if (currentProfileId === "default") return;
-      const p = getCurrentProfile();
-      if (!p) return;
-      if (!await showConfirmDialog(t("prompt.delete_confirm", {name: p.name}))) return;
-      await window.aideagent.deletePromptProfile(currentProfileId);
-      delete promptStore.profiles[currentProfileId];
-      currentProfileId = "default";
-      promptStore.activeProfile = "default";
-      await window.aideagent.activatePromptProfile("default");
-      renderProfileSelector();
-      renderPromptEditor();
-      showPromptStatus(t("prompt.deleted", {name: p.name}), "success");
-    });
-  }
-
-  // Save button
-  const saveBtn = document.getElementById("prompt-save-btn");
-  if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-      const p = getCurrentProfile();
-      if (p && nameInput && nameInput.value.trim()) p.name = nameInput.value.trim();
-      await saveCurrentProfile();
-    });
-  }
-}
-
-function showPromptStatus(msg, type) {
-  const el = document.getElementById("prompt-settings-status");
-  if (!el) return;
-  el.textContent = msg;
-  el.className = "settings-status";
-  if (type) el.classList.add(`settings-status--${type}`);
-  setTimeout(() => { if (el.textContent === msg) el.className = "settings-status hidden"; }, 3000);
-}
-
-// ── Prompt profile actions ──
-
-async function addNewProfile() {
-  const name = getNextProfileName();
-  const id = "profile_" + Date.now();
-  const newProfile = {
-    id,
-    name,
-    enabled: true,
-    content: "",
-  };
-  promptStore.profiles[id] = newProfile;
-  currentProfileId = id;
-  promptStore.activeProfile = id;
-  for (const pid of Object.keys(promptStore.profiles)) {
-    if (pid !== id) promptStore.profiles[pid].enabled = false;
-  }
-  await window.aideagent.savePromptProfile(newProfile);
-  await window.aideagent.activatePromptProfile(id);
-  for (const pid of Object.keys(promptStore.profiles)) {
-    if (pid !== id) await window.aideagent.savePromptProfile(promptStore.profiles[pid]);
-  }
-  renderProfileSelector();
-  renderPromptEditor();
-}
+// Extracted to modules/prompt-store.mjs (Step 3d).
+// All prompt profile state (promptStore, currentProfileId, _promptDirty) is
+// encapsulated in the module's closure. Exposes 4 functions: loadPromptStore,
+// renderProfileSelector, renderPromptEditor, addNewProfile.
+// 已提取到 modules/prompt-store.mjs（Step 3d）。所有 prompt 状态封装在闭包内。
+const promptStoreCtl = createPromptStore({
+  t,
+  onConfirm: showConfirmDialog,
+});
+const loadPromptStore = promptStoreCtl.loadPromptStore;
+const renderProfileSelector = promptStoreCtl.renderProfileSelector;
+const renderPromptEditor = promptStoreCtl.renderPromptEditor;
+const addNewProfile = promptStoreCtl.addNewProfile;
 
 // ── Prompt event bindings ──
 
@@ -2436,20 +2156,9 @@ document.querySelector('.settings-tab[data-tab="prompt"]')?.addEventListener("cl
 });
 
 /* ── Settings tab switching ──────────────────────────── */
-function switchSettingsTab(tabName) {
-  document.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".settings-panel").forEach(p => p.classList.remove("active"));
-  const tab = document.querySelector(`.settings-tab[data-tab="${tabName}"]`);
-  const panel = document.getElementById(`panel-${tabName}`);
-  if (tab) tab.classList.add("active");
-  if (panel) panel.classList.add("active");
-}
-
-document.querySelectorAll(".settings-tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    switchSettingsTab(tab.dataset.tab);
-  });
-});
+// Extracted to modules/settings-tabs.mjs. Click listeners are now bound by
+// initSettingsTabs() during init (see bottom of file).
+// 已提取到 modules/settings-tabs.mjs。点击监听器由 initSettingsTabs() 初始化。
 
 /* ── Settings modal ─────────────────────────────────── */
 settingsCloseBtn.addEventListener("click", () => {
@@ -2537,6 +2246,8 @@ window.addEventListener("focus", () => {
 });
 
 /* ── Init ──────────────────────────────────────────────── */
+initSettingsTabs();
+filePreviews.init();
 setupIPC();
 loadAvatar();
 initAgentNameUI();

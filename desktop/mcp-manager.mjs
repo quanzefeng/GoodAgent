@@ -114,7 +114,7 @@ class McpManager {
     for (const [name, definition] of Object.entries(BUILTIN_SERVERS)) {
       // defaultEnabled: false = opt-in, only start if user explicitly enabled
       const state = this._builtinState[name];
-      const shouldStart = definition.defaultEnabled === false ? state === true : state !== false;
+      const shouldStart = /** @type {any} */ (definition).defaultEnabled === false ? state === true : state !== false;
       if (shouldStart) {
         console.log(`[mcp] Starting builtin "${name}"...`);
         const cfg = { command: definition.command, args: [...definition.args], env: { ...definition.env } };

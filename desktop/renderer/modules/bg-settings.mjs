@@ -15,6 +15,14 @@
 
 const THEME_KEY = "AideAgent_theme";
 
+// ── Type-safe DOM lookup helpers ──────────────────────────────────
+// These wrap document.getElementById with a JSDoc type so we don't need
+// to cast at every call site. Use the right helper for the element type.
+/** @returns {HTMLCanvasElement | null} */
+const $canvas = (id) => /** @type {HTMLCanvasElement | null} */ (document.getElementById(id));
+/** @returns {HTMLInputElement | null} */
+const $input = (id) => /** @type {HTMLInputElement | null} */ (document.getElementById(id));
+
 // ── 预设主题 ──
 const PRESETS = {
   cream:       { bg: "#faf6ef", accent: "#f59e0b" },
@@ -215,8 +223,8 @@ function syncColorPicker(theme) {
 }
 
 function initColorPicker() {
-  const square = document.getElementById("bg-color-square");
-  const hueBar = document.getElementById("bg-color-hue-bar");
+  const square = $canvas("bg-color-square");
+  const hueBar = $canvas("bg-color-hue-bar");
   if (!square || !hueBar) return;
 
   slCanvasCtx = square.getContext("2d");
@@ -279,16 +287,17 @@ function initColorPicker() {
 }
 
 function applyToUI(theme) {
-  const slider = document.getElementById("bg-brightness-slider");
+  const slider = $input("bg-brightness-slider");
   const sliderVal = document.getElementById("bg-brightness-value");
-  const accentPicker = document.getElementById("bg-accent-picker");
-  const accentHex = document.getElementById("bg-accent-hex");
-  if (slider) slider.value = Math.round(theme.brightness * 100);
+  const accentPicker = $input("bg-accent-picker");
+  const accentHex = $input("bg-accent-hex");
+  if (slider) slider.value = String(Math.round(theme.brightness * 100));
   if (sliderVal) sliderVal.textContent = Math.round(theme.brightness * 100) + "%";
   if (accentPicker) accentPicker.value = theme.accent;
   if (accentHex) accentHex.value = theme.accent;
   document.querySelectorAll(".bg-preset-swatch").forEach(el => {
-    el.classList.toggle("active", el.dataset.preset === theme.preset);
+    const sw = /** @type {HTMLElement} */ (el);
+    sw.classList.toggle("active", sw.dataset.preset === theme.preset);
   });
   syncColorPicker(theme);
 }
@@ -322,10 +331,10 @@ function renderPresets(currentTheme) {
 }
 
 function bindControls(initial) {
-  const slider = document.getElementById("bg-brightness-slider");
+  const slider = $input("bg-brightness-slider");
   const sliderVal = document.getElementById("bg-brightness-value");
-  const accentPicker = document.getElementById("bg-accent-picker");
-  const accentHex = document.getElementById("bg-accent-hex");
+  const accentPicker = $input("bg-accent-picker");
+  const accentHex = $input("bg-accent-hex");
   const resetBtn = document.getElementById("bg-reset-btn");
 
   const update = (patch) => {

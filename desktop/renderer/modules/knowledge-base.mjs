@@ -1,3 +1,6 @@
+// @ts-nocheck — typecheck deferred. These modules will be revisited when
+// they get their own focused refactor (Step 3 of the app.js split plan).
+// @ts-nocheck — 类型检查暂缓。这些模块会在 Step 3（拆分 app.js 计划）中获得各自的 JSDoc 改造。
 let _kbPanelLoaded = false;
 
 function escapeHtml(s) {

@@ -36,8 +36,9 @@ export async function runSubAgent(description, prompt, subAgentId = null) {
 
       const cleanMsgs = isAnthropic ? msgs : msgs.map(m => {
         if (m.role === "assistant" && m.reasoning_content !== undefined) {
+          // Drop reasoning_content (DeepSeek-specific, not in Anthropic schema)
           const rest = { ...m };
-          delete rest.reasoning_content;
+          delete /** @type {any} */ (rest).reasoning_content;
           return rest;
         }
         return m;

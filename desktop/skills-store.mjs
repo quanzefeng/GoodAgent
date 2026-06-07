@@ -522,7 +522,7 @@ export function getSkillHealth(name) {
   const skill = loadSkill(name);
   if (!skill) return null;
   const curator = loadCurator(), stats = curator[name] || {};
-  const usage = stats.usage_count || skill.usage_count || 0;
+  const usage = stats.usage_count || /** @type {any} */ (skill).usage_count || 0;
   const success = stats.success_rate || 1;
   const usageScore = Math.min(usage / 5, 1) * 5, successScore = success * 5;
   return { name, usage, successRate: Math.round(success * 100), totalScore: Math.round((usageScore + successScore) * 10) / 10, maxScore: 10, status: (usageScore + successScore) >= 6 ? "healthy" : (usageScore + successScore) >= 3 ? "ok" : "weak" };

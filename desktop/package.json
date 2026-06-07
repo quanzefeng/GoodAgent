@@ -20,6 +20,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
     "download-model": "node scripts/download-model.mjs",
     "postinstall": "node scripts/download-model.mjs"
   },
@@ -85,6 +88,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
     "cross-env": "^10.1.0",
     "electron": "^40.8.0",
     "electron-builder": "^26.0.0",
@@ -98,4 +102,3 @@
     "qrcode": "^1.5.4"
   }
 }
-

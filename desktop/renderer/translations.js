@@ -965,7 +965,6 @@ const translations = {
     "mcp.add": "Add",
     "mcp.detect_local": "📡 Detect Local MCP Configs",
     "mcp.empty_hint": "No MCP servers configured. Click \"Add Server\" to get started.",
-    "mcp.import_btn": "Import",
     "mcp.refresh": "Refresh",
     "mcp.builtins_title": "🔌 Built-in Services (One-Click)",
     "mcp.builtins_hint": "Pre-configured MCP servers, zero configuration required. Toggle on to make them available in AI conversations.",
@@ -1004,17 +1003,22 @@ function t(key, vars = {}) {
 }
 
 function applyLang() {
-  // Static text elements
+  // Static text elements. Cast to any because:
+  //   - placeholder only exists on HTMLInputElement/HTMLTextAreaElement
+  //   - title/textContent exist on most HTMLElements
+  // Using a single `any` is simpler and matches the dynamic use of data-i18n attrs.
   document.querySelectorAll("[data-i18n]").forEach(el => {
-    const key = el.getAttribute("data-i18n");
-    if (el.hasAttribute("data-i18n-placeholder")) {
-      el.placeholder = t(key);
+    const html = /** @type {any} */ (el);
+    const key = html.getAttribute("data-i18n");
+    if (html.hasAttribute("data-i18n-placeholder")) {
+      html.placeholder = t(key);
     } else {
-      el.textContent = t(key);
+      html.textContent = t(key);
     }
   });
   // Title attributes
   document.querySelectorAll("[data-i18n-title]").forEach(el => {
-    el.title = t(el.getAttribute("data-i18n-title"));
+    const html = /** @type {HTMLElement} */ (el);
+    html.title = t(/** @type {string} */ (html.getAttribute("data-i18n-title")));
   });
 }
