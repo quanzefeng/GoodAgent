@@ -61,14 +61,20 @@ export function createFilePreviews({
       return;
     }
     filePreviewArea.classList.remove("hidden");
+    // P0-3: comprehensive HTML escape for user-controlled filename to prevent XSS.
+    // The old code only escaped `<` and `"`, leaving `&`, `>`, `'` un-escaped.
+    // dataUrl comes from FileReader (always base64 data: URL) but escape it too for defense in depth.
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
     filePreviewArea.innerHTML = files.map(/** @param {{ name: string; size: number; type: string; dataUrl: string }} f @param {number} i */ (f, i) => {
       const isImg = f.type.startsWith("image/");
       const iconHtml = isImg
-        ? `<img src="${f.dataUrl}" alt="" />`
+        ? `<img src="${esc(f.dataUrl)}" alt="" />`
         : fileIconSvg(f.type, f.name);
       return `<div class="file-chip">
         <span class="file-chip-icon">${iconHtml}</span>
-        <span class="file-chip-name" title="${f.name.replace(/"/g, "&quot;")}">${f.name.replace(/</g, "&lt;")}</span>
+        <span class="file-chip-name" title="${esc(f.name)}">${esc(f.name)}</span>
         <span class="file-chip-size">${formatFileSize(f.size)}</span>
         <button class="file-chip-remove" data-index="${i}" title="移除">✕</button>
       </div>`;
