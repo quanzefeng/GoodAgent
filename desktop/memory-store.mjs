@@ -244,6 +244,10 @@ export function readMemory(filename) {
  */
 export function createMemory(name, description, type, body) {
   if (!name) return { ok: false, error: "name is required" };
+  // P1: reject empty bodies to prevent empty memory files
+  if (!body || !String(body).trim()) {
+    return { ok: false, error: "body is required (refusing to create empty memory)" };
+  }
   const safeName = name.replace(/[^a-zA-Z0-9_\-一-鿿]/g, "_");
   const filename = safeName.endsWith(".md") ? safeName : safeName + ".md";
   const frontmatter = makeFrontMatter(name, description || "", type || "project");
@@ -426,12 +430,42 @@ export function appendUserMemory(content) {
 
 /**
  * @param {string} content
- * @returns {{ ok: boolean, filename?: string, name?: string, error?: string }}
+ * @returns {{ ok: boolean, filename?: string, name?: string, error?: string, merged?: boolean }}
  */
 export function appendProjectMemory(content) {
-  // Create a new memory entry for each append call
+  // P1: reject empty content
+  if (!content || !String(content).trim()) {
+    return { ok: false, error: "content is required (refusing to append empty memory)" };
+  }
+  const safeContent = String(content).trim();
+
+  // P2: try to merge into an existing similar project memory first.
+  // Scans the most recent 20 project memories; if any has >50% word overlap
+  // with the new content, append a dated update to that file instead of
+  // creating a new one. Prevents unbounded fragmentation from auto-review.
+  const allMemories = listMemories();
+  const candidates = allMemories
+    .filter(m => m.type === "project" && m.body && m.body.trim())
+    .slice(0, 20);
+
+  const newWords = safeContent.split(/\s+/).filter(w => w.length > 2);
+  if (newWords.length > 0) {
+    for (const m of candidates) {
+      const overlap = newWords.filter(w => m.body.includes(w)).length;
+      const ratio = overlap / newWords.length;
+      if (ratio >= 0.5) {
+        // Merge with date-stamped separator
+        const today = new Date().toISOString().slice(0, 10);
+        const merged = `${m.body}\n\n---\n\n[更新 ${today}]\n${safeContent}`;
+        const result = updateMemory(m.filename, merged);
+        return { ...result, merged: true };
+      }
+    }
+  }
+
+  // No similar memory found — create new
   const name = "memory_" + Date.now().toString(36);
-  return createMemory(name, "Project memory", "project", content);
+  return createMemory(name, "Project memory", "project", safeContent);
 }
 
 /**
@@ -477,3 +511,15 @@ export function checkDuplicate(type, text) {
 
 // ── Index on load (lazy) ──────────────────────────────────────
 try { migrateFromOldFormat(); } catch { /* ignored */ }
+
+// P1: clean up existing empty memory files (defensive one-shot at module load)
+try {
+  const before = listMemories().length;
+  let removed = 0;
+  for (const m of listMemories()) {
+    if (!m.body || !m.body.trim()) {
+      try { deleteMemory(m.filename); removed++; } catch { /* ignored */ }
+    }
+  }
+  if (removed > 0) console.log(`[memory] Cleaned up ${removed} empty memory file(s) at startup`);
+} catch { /* ignored */ }

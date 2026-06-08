@@ -18,7 +18,7 @@ export async function selectRelevantMemories(query, apiKey, apiUrl, model, apiFo
   const candidates = freshMemories.length >= 3 ? freshMemories : memories;
   if (candidates.length === 0) return "";
 
-  if (candidates.length <= 5) {
+  if (candidates.length <= 8) {
     for (const m of candidates) _surfacedMemories.add(m.filename);
     return candidates.map(m => {
       const ageNote = memory.memoryFreshnessNote(m.mtimeMs);
@@ -32,9 +32,18 @@ export async function selectRelevantMemories(query, apiKey, apiUrl, model, apiFo
     return `- ${m.filename} [${m.type}] ${m.name}: ${m.description}${ageStr}`;
   }).join("\n");
 
-  const selectPrompt = `You are selecting memory files relevant to a user's query. From the list below, pick up to 5 files that are clearly useful. Be selective — if unsure, skip it. Do NOT select reference docs for tools already being used (unless they contain warnings/gotchas).
+  const selectPrompt = `You are selecting memory files relevant to a user's query. Pick up to 8 files.
 
-CRITICAL: If the query starts with "当前任务上下文:", the user is ALREADY working on a specific task (described after that prefix). Skip memories that describe the SAME task — the agent doesn't need to be reminded of what it's currently doing. Only select memories that provide genuinely NEW background knowledge or related-but-different context. Memories that describe tasks already being worked on are interference, not help.
+PRIORITY ORDER (load in this order, skip types that don't apply):
+1. USER memories (preferences, identity, interests) — try to include at least 1
+2. FEEDBACK memories (corrections, behavior rules, "don't do X") — try to include at least 1
+3. PROJECT memories (project context, technical decisions)
+4. REFERENCE memories (docs, tool references) — only if directly needed
+
+Hard rules:
+- If a user/feedback memory exists and is at all relevant, prefer it over a project memory
+- Do NOT select reference docs for tools already being used (unless they contain warnings/gotchas)
+- Skip memories that describe the SAME task being worked on (interference, not help)
 
 Return ONLY a JSON array of filenames.
 
@@ -43,7 +52,7 @@ User query: ${query.slice(0, 500)}
 Available memories:
 ${manifest}
 
-Return: {"selected_memories": ["file1.md", "file2.md"]}`;
+Return: {"selected_memories": ["file1.md", "file2.md", "file3.md"]}`;
 
   try {
     /** @type {{ model: string, messages: { role: string, content: string }[], max_tokens: number, stream: boolean, system?: string }} */
@@ -95,7 +104,7 @@ Return: {"selected_memories": ["file1.md", "file2.md"]}`;
 
       const selected = candidates.filter(m =>
         validNames.some(sn => m.filename === sn || m.filename === sn + ".md" || m.filename.includes(sn) || sn.includes(m.filename.replace(/\.md$/, "")))
-      ).slice(0, 5);
+      ).slice(0, 8);
 
       if (selected.length > 0) {
         for (const m of selected) _surfacedMemories.add(m.filename);
