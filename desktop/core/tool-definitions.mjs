@@ -1,11 +1,20 @@
 // ── Tool Definitions (OpenAI function calling) ─────────────
+//
+// Each description follows a Claude Code-style structure:
+//   1) WHAT it does (1 line)
+//   2) WHEN to use it (1-3 examples)
+//   3) WHEN NOT to use it (redirect to the right tool)
+//
+// LLM tool-choice quality is dominated by these descriptions. Vague or
+// overlap-y descriptions cause the model to pick wrong tools or skip them
+// entirely. Keep them sharp and mutually exclusive.
 
 export const TOOL_DEFS = [
   {
     type: "function",
     function: {
       name: "bash",
-      description: "Execute a PowerShell command on Windows. Use for file operations, git, npm, running scripts, exploring project structure.",
+      description: "Run a PowerShell command on Windows. Returns stdout/stderr/exit code.\n\nUSE for: running builds, tests, git/npm/Node commands, exploring project structure (`Get-ChildItem`, `Select-String`), one-off shell operations.\n\nDO NOT use for: reading a file you already know the path to (use `file_read`); searching code (use `grep`); finding files by name (use `glob`). The shell is your fallback — prefer the dedicated tools above whenever possible.",
       parameters: {
         type: "object",
         properties: {
@@ -20,10 +29,10 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "file_read",
-      description: "Read the full text content of a file.",
+      description: "Read the full text content of a single file. Use when you know the path.\n\nUSE for: reading source code, config files, SKILL.md, CLAUDE.md, package.json.\n\nDO NOT use for: searching content across files (use `grep`); listing files in a directory (use `glob` or `bash Get-ChildItem`); reading knowledge-base notes (use `kb_get_note`); binary or huge files (>2000 lines — read in slices via grep first).",
       parameters: {
         type: "object", properties: {
-          path: { type: "string", description: "Path to the file" },
+          path: { type: "string", description: "Path to the file (absolute or relative to workspace)" },
         }, required: ["path"],
       },
     },
@@ -32,7 +41,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "file_write",
-      description: "Create or overwrite a file. Auto-creates parent directories.",
+      description: "Create or fully overwrite a file. Auto-creates parent directories.\n\nUSE for: new files; complete rewrites; small config files.\n\nDO NOT use for: surgical changes to existing files (use `file_edit` — it preserves surrounding code and is safer); writing markdown notes to the knowledge base (use `kb_write`); writing session memories (use `write_memory`).",
       parameters: {
         type: "object", properties: {
           path: { type: "string", description: "Path to the file" },
@@ -45,7 +54,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "file_edit",
-      description: "Edit a file by replacing exact matching text (surgical edit).",
+      description: "Replace exact text in a file (surgical edit). Safer than `file_write` because it cannot accidentally delete unrelated code.\n\nUSE for: any modification to an existing file where you know the surrounding text.\n\nDO NOT use for: creating a new file (use `file_write`); replacing an entire file (use `file_write` if rewriting from scratch). The `old_string` must match EXACTLY (whitespace, punctuation, capitalization included).",
       parameters: {
         type: "object", properties: {
           path: { type: "string", description: "Path to the file" },
@@ -59,7 +68,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "grep",
-      description: "Search file contents with regex. Returns file:line matches.",
+      description: "Search file contents with a regex. Returns file:line matches.\n\nUSE for: finding where a function/symbol/string is defined or used; searching multiple files; code archaeology.\n\nDO NOT use for: finding files by name (use `glob`); reading a known file (use `file_read`); searching the knowledge base (use `kb_search`). Prefer `include` filter to limit scope.",
       parameters: {
         type: "object", properties: {
           pattern: { type: "string", description: "Regex to search" },
@@ -73,10 +82,10 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "glob",
-      description: "Find files matching a glob pattern (e.g. **/*.ts, src/**/*.css).",
+      description: "Find files by name pattern (glob). Returns file paths.\n\nUSE for: finding files by name (`**/*.ts`, `src/**/*.css`); listing directory contents by extension; locating config files.\n\nDO NOT use for: searching file contents (use `grep`); reading a known file (use `file_read`); recursive directory trees (use `bash Get-ChildItem -Recurse`).",
       parameters: {
         type: "object", properties: {
-          pattern: { type: "string", description: "Glob pattern" },
+          pattern: { type: "string", description: "Glob pattern (e.g. **/*.ts, src/**/*.css)" },
           path: { type: "string", description: "Directory (default: workspace)" },
         }, required: ["pattern"],
       },
@@ -86,7 +95,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "web_fetch",
-      description: "Fetch a URL and extract readable text content. Use to read web pages, documentation, articles, or API responses.",
+      description: "Fetch a URL and extract readable text content.\n\nUSE for: reading documentation pages, articles, GitHub READMEs, API references, single-page fetches where you know the URL.\n\nDO NOT use for: searching across multiple sources (use `web_search`); reading local files (use `file_read`); bulk operations (do multiple `web_fetch` in parallel via sub-agents).",
       parameters: {
         type: "object", properties: {
           url: { type: "string", description: "The URL to fetch (must start with http:// or https://)" },
@@ -99,7 +108,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "web_search",
-      description: "Search the internet for current information. Use when you need up-to-date news, facts, documentation, or data not in training. Returns AI-friendly snippets with source URLs.",
+      description: "Search the internet for current information.\n\nUSE for: up-to-date news, recent documentation, current API changes, current best practices, anything post-training-cutoff.\n\nDO NOT use for: searching the user's local files (use `grep` / `glob`); searching their knowledge base (use `kb_search`); questions about the current project (read the files instead — they are authoritative).",
       parameters: {
         type: "object", properties: {
           query: { type: "string", description: "The search query" },
@@ -112,7 +121,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "skill",
-      description: "Load a user-installed skill (a guided workflow in SKILL.md format). Skills provide step-by-step instructions for specific tasks like code review, QA testing, debugging, deployment, etc. Call this first to see what skills are available, then load the one you need.",
+      description: "Load a user-installed skill (a guided workflow in SKILL.md format).\n\nUSE for: when the system prompt's <skills> section lists a skill whose name or description matches the task — call this FIRST before improvising. The skill's SKILL.md contains step-by-step instructions the user has already curated.\n\nDO NOT use for: when no skill clearly matches the task; when you have already loaded the skill in this session (call `invoke_skill` instead to re-execute).",
       parameters: {
         type: "object", properties: {
           name: { type: "string", description: "The skill name to load (e.g. 'review', 'qa', 'investigate')" },
@@ -124,14 +133,14 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "write_memory",
-      description: "Save an important fact to permanent memory. Four types: 'user' (about the user), 'feedback' (guidance/corrections from user), 'project' (ongoing work context), 'reference' (external system pointers). Use 'name' and 'description' fields for future search. If updating, provide 'filename'.\n\nDO NOT save: code patterns/architecture (derivable from files), git history (git log is authoritative), debug solutions (the fix is in the code), info already in CLAUDE.md, or ephemeral task state. Only save non-obvious, non-derivable context.",
+      description: "Save an important fact to permanent cross-session memory.\n\nFour types: 'user' (about the user), 'feedback' (guidance/corrections from user), 'project' (ongoing work context), 'reference' (external system pointers).\n\nUSE for: user preferences, project deadlines/stand, stakeholder decisions, external API keys/URLs, recurring corrections.\n\nDO NOT save: code patterns/architecture (read the files); git history (git log is authoritative); debug solutions (the fix is in code); info already in CLAUDE.md/AGENTS.md; ephemeral task state; anything derivable from the current project. Only save non-obvious, non-derivable context that would be lost across sessions. Use 'name' and 'description' fields for future search. If updating, provide 'filename'.",
       parameters: {
         type: "object", properties: {
-          type: { type: "string", enum: ["user", "feedback", "project", "reference"], description: "Memory type: user (personal info/preferences), feedback (user's guidance/corrections), project (ongoing work context), reference (external system pointers)" },
+          type: { type: "string", enum: ["user", "feedback", "project", "reference"], description: "Memory type" },
           name: { type: "string", description: "Short descriptive name (e.g. 'user_role', 'feedback_tests_must_hit_db')" },
           description: { type: "string", description: "One-line summary used for relevance search" },
-          content: { type: "string", description: "The information to remember, in markdown format. For feedback type: start with the rule, then **Why:** and **How to apply:**." },
-          filename: { type: "string", description: "If updating existing memory, provide the filename (e.g. 'user_role.md')" },
+          content: { type: "string", description: "Markdown content. For 'feedback' type: start with the rule, then **Why:** and **How to apply:**." },
+          filename: { type: "string", description: "If updating existing memory, provide the filename" },
         }, required: ["type", "content"],
       },
     },
@@ -140,7 +149,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "invoke_skill",
-      description: "Load and execute a saved skill. Skills are reusable workflows created by the user or generated by the agent. Call this tool to get the full skill instructions when you need to perform a task that has a matching skill.",
+      description: "Execute a skill that was previously loaded. Skills are reusable workflows created by the user or generated by the agent.\n\nUSE for: tasks that match a skill you have already loaded this session (or one listed in <skills>).\n\nDO NOT use for: a skill you have not loaded yet (call `skill` first); generic tasks not covered by any skill.",
       parameters: {
         type: "object", properties: {
           name: { type: "string", description: "The skill name to invoke" },
@@ -152,12 +161,12 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "create_skill",
-      description: "Create a new reusable skill OR update an existing one. If a skill with this name already exists, the new information will be merged in and the version bumped. Call this when you notice the user repeatedly asking for the same kind of task, or when you discover a better way to do something already in a skill.",
+      description: "Create a new reusable skill OR update an existing one (merge by name).\n\nUSE for: when you notice the user repeatedly asking for the same kind of task; when you discover a better way to do something already covered by a skill; when the user explicitly says 'remember how to do X'.\n\nDO NOT use for: one-off tasks (use `write_memory` instead to record a fact).",
       parameters: {
         type: "object", properties: {
           name: { type: "string", description: "Skill name (lowercase-hyphenated, e.g. 'deploy-frontend')" },
           description: { type: "string", description: "Short description of what this skill does (updated if skill exists)" },
-          prompt: { type: "string", description: "Description of the task pattern to encode as a skill, or improvements to add to existing skill" },
+          prompt: { type: "string", description: "Description of the task pattern to encode as a skill, or improvements to add" },
         }, required: ["name", "description", "prompt"],
       },
     },
@@ -167,7 +176,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "TaskCreate",
-      description: "Create a new task to track progress during complex multi-step work. Use for organizing 3+ distinct steps.",
+      description: "Create a new task to track progress during complex multi-step work.\n\nUSE for: 3+ distinct steps; multi-file work; anything you would otherwise write a numbered todo list for. Use TaskCreate, then mark `in_progress` when starting each task and `completed` immediately when done.\n\nDO NOT use for: 1-2 simple steps; ephemeral session checkboxes (use `TodoWrite` instead, which is lighter-weight and lives only in this session).",
       parameters: {
         type: "object", properties: {
           subject: { type: "string", description: "A brief title for the task" },
@@ -181,13 +190,13 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "TaskUpdate",
-      description: "Update a task's status or details. Mark tasks in_progress when starting, completed when done. Use 'deleted' to remove irrelevant tasks.",
+      description: "Update a task's status or details. Mark in_progress when starting, completed when done.\n\nUSE for: transitioning task lifecycle; editing a task's subject/description.\n\nDO NOT use for: deleting a finished task that's just clutter (it's fine to leave completed tasks; only use status='deleted' for obsolete ones).",
       parameters: {
         type: "object", properties: {
           taskId: { type: "string", description: "The ID of the task to update" },
           status: { type: "string", enum: ["pending", "in_progress", "completed", "deleted"], description: "New status" },
-          subject: { type: "string", description: "New subject for the task" },
-          description: { type: "string", description: "New description for the task" },
+          subject: { type: "string", description: "New subject" },
+          description: { type: "string", description: "New description" },
         }, required: ["taskId"],
       },
     },
@@ -196,7 +205,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "TaskList",
-      description: "List all tasks in the task list to see current progress.",
+      description: "List all tasks to see current progress.\n\nUSE for: mid-task orientation when you've been working on many tasks and lost track.\n\nDO NOT call repeatedly — only when you actually need a snapshot.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -205,7 +214,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "TodoWrite",
-      description: "Update the session todo checklist. Use proactively to track progress. Exactly one task in_progress at a time. Mark tasks complete immediately after finishing. Provide both 'content' (imperative) and 'activeForm' (present continuous) for each task.",
+      description: "Update the lightweight session todo checklist (NOT persistent across sessions).\n\nUSE for: 1-5 step tasks within a single turn where the user benefits from seeing live progress (rendered in the UI). Exactly one task `in_progress` at a time. Mark complete immediately after finishing.\n\nDO NOT use for: persistent tracking (use `TaskCreate`); >5 steps (use `TaskCreate` instead).",
       parameters: {
         type: "object", properties: {
           todos: {
@@ -230,7 +239,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "AskUserQuestion",
-      description: "Ask the user multiple-choice questions to gather information, clarify ambiguity, or understand preferences. Use when you need user input before proceeding.",
+      description: "Ask the user multiple-choice questions to clarify ambiguity before acting.\n\nUSE for: when the request has 2-4 reasonable interpretations and guessing wrong would waste significant work; when choosing between 2+ valid approaches with different trade-offs; when confirming destructive/irreversible actions.\n\nDO NOT use for: simple yes/no confirmation; asking the same question you could answer yourself with file_read/grep; piling up trivial questions; more than 4 questions. Prefer to keep going if the cost of being wrong is low.",
       parameters: {
         type: "object", properties: {
           questions: {
@@ -267,11 +276,11 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "Agent",
-      description: "Launch a read-only sub-agent to search the web or explore code IN PARALLEL while you continue other work. Sub-agents can use: web_search, web_fetch, file_read, grep, glob. Use this when you need to gather information from multiple sources simultaneously. The sub-agent works independently and returns a text summary. Example: to search for latest AI news while also checking code, call Agent twice with different prompts.",
+      description: "Launch a read-only sub-agent for INDEPENDENT research tasks in parallel.\n\nUSE for: gathering information from 2+ independent sources simultaneously (e.g. read 3 different files for context, or search web + grep code in parallel). Sub-agents have access to web_search, web_fetch, file_read, grep, glob. They return a single text summary — they CANNOT modify files.\n\nDO NOT use for: sequential tasks (one task depends on another's result); single quick lookups; anything that needs file modification. Don't use Agent when the same job can be done with one direct tool call.",
       parameters: {
         type: "object", properties: {
           description: { type: "string", description: "Short name for this sub-task (e.g. 'search AI news', 'find TODO files')" },
-          prompt: { type: "string", description: "The complete task for the sub-agent. Be specific about what to find and what format to return. Example: 'Search the web for the top 3 AI news stories this week and summarize each in 2-3 sentences.'" },
+          prompt: { type: "string", description: "The complete task for the sub-agent. Be specific about what to find and what format to return." },
         }, required: ["description", "prompt"],
       },
     },
@@ -281,7 +290,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "kb_search",
-      description: "Search the user's knowledge base (Obsidian vault) for notes matching a query. Returns relevant snippets. Use this when the system prompt's <knowledge-base> section doesn't have enough detail, or when you need to find specific information from the user's notes.",
+      description: "Search the user's knowledge base (Obsidian vault) for notes matching a query. Returns relevant snippets.\n\nUSE for: when the system prompt's <knowledge-base> section doesn't have enough detail; when you need to find specific information from the user's personal notes; questions about the user's projects/notes/research.\n\nDO NOT use for: searching the current project (use `grep` / `glob`); reading a known note (use `kb_get_note`); general web search (use `web_search`).",
       parameters: {
         type: "object",
         properties: {
@@ -296,7 +305,7 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "kb_write",
-      description: "Create or update a note in the user's knowledge base (Obsidian vault). Use this to save important findings, research results, or organized knowledge.",
+      description: "Create or update a note in the user's knowledge base (Obsidian vault).\n\nUSE for: saving research findings, organized knowledge, long-form notes the user may want to re-read later. Auto-injected into future prompts as <knowledge-base>.\n\nDO NOT use for: cross-session user facts (use `write_memory`); session scratchpads.",
       parameters: {
         type: "object",
         properties: {
@@ -312,10 +321,9 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "kb_get_note",
-      description: "Read the full content of a specific note from the user's knowledge base. Use this after kb_search to get the complete text of a note.",
+      description: "Read the full content of a specific note from the knowledge base.\n\nUSE for: after `kb_search` returns a result and you need the full text of a specific note; or when you know the exact path.\n\nDO NOT use for: searching (use `kb_search`); reading current project files (use `file_read`).",
       parameters: {
-        type: "object",
-        properties: {
+        type: "object", properties: {
           path: { type: "string", description: "Relative path of the note (e.g. 'folder/note.md')" },
         },
         required: ["path"],
@@ -327,11 +335,11 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "lsp",
-      description: "Language Server Protocol: go to definition, find references, hover info, document symbols. Requires a language server installed for the file's language.",
+      description: "Language Server Protocol: go to definition, find references, hover info, document symbols. Requires a language server installed for the file's language.\n\nUSE for: navigating code (jump to where a symbol is defined); finding all callers of a function; reading type signatures on hover; listing symbols in a file.\n\nDO NOT use for: code search by content (use `grep`); finding files (use `glob`); when no language server is configured for the file type — fall back to grep + file_read.",
       parameters: {
         type: "object",
         properties: {
-          operation: { type: "string", enum: ["goToDefinition", "findReferences", "hover", "documentSymbol"], description: "The LSP operation to perform" },
+          operation: { type: "string", enum: ["goToDefinition", "findReferences", "hover", "documentSymbol"], description: "The LSP operation" },
           filePath: { type: "string", description: "Absolute path to the file" },
           line: { type: "number", description: "Line number (1-based)" },
           character: { type: "number", description: "Character offset (1-based)" },
@@ -345,12 +353,11 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "git_diff",
-      description: "Show current uncommitted changes (git diff). Optionally show diff for a specific file.",
+      description: "Show uncommitted git changes (`git diff`). Optionally filter to a specific file or show staged changes.\n\nUSE for: reviewing what you've changed before committing; showing the user the diff; confirming the working state.\n\nDO NOT use for: viewing file contents (use `file_read`); viewing history (use `bash git log`).",
       parameters: {
-        type: "object",
-        properties: {
-          file: { type: "string", description: "Optional: specific file path to diff" },
-          staged: { type: "boolean", description: "If true, show staged changes (git diff --cached)" },
+        type: "object", properties: {
+          file: { type: "string", description: "Specific file path to diff" },
+          staged: { type: "boolean", description: "If true, show staged changes (`git diff --cached`)" },
         },
       },
     },
@@ -359,10 +366,9 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "git_commit",
-      description: "Stage changes and create a git commit. If message is omitted, returns diff for AI to generate a commit message.",
+      description: "Stage changes and create a git commit. If `message` is omitted, returns the diff for the AI to generate a commit message.\n\nUSE for: committing work after the user approves.\n\nDO NOT use for: pushing (push is separate); committing without user consent on shared branches.",
       parameters: {
-        type: "object",
-        properties: {
+        type: "object", properties: {
           message: { type: "string", description: "Commit message. If omitted, AI will generate one from the diff." },
           files: { type: "array", items: { type: "string" }, description: "Specific files to stage. If omitted, stages all changed files." },
           amend: { type: "boolean", description: "If true, amend the last commit" },
@@ -374,10 +380,9 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "git_branch",
-      description: "Create, switch, or list git branches.",
+      description: "Create, switch, list, or query git branches.\n\nUSE for: starting a new feature branch; switching contexts; listing local branches.\n\nDO NOT use for: committing changes (use `git_commit`); viewing history (use `bash git log`).",
       parameters: {
-        type: "object",
-        properties: {
+        type: "object", properties: {
           action: { type: "string", enum: ["create", "switch", "list", "current"], description: "Branch action" },
           name: { type: "string", description: "Branch name (required for create/switch)" },
         },
@@ -385,19 +390,18 @@ export const TOOL_DEFS = [
       },
     },
   },
-  // ── GitHub (gh CLI) ──
+  // ── GitHub (gh cli) ──
   {
     type: "function",
     function: {
       name: "gh_pr",
-      description: "GitHub Pull Request operations via gh CLI. Create, view, list, diff, merge, or checkout PRs.",
+      description: "GitHub Pull Request operations via `gh` CLI. Create, view, list, diff, merge, checkout, or close PRs.\n\nUSE for: any GitHub PR workflow.\n\nDO NOT use for: pushing branches (use `bash git push`); non-GitHub git operations.",
       parameters: {
-        type: "object",
-        properties: {
+        type: "object", properties: {
           action: {
             type: "string",
             enum: ["create", "view", "list", "diff", "merge", "checkout", "close"],
-            description: "PR action: create (open new PR), view (show PR details), list (list PRs), diff (show PR diff), merge (merge PR), checkout (switch to PR branch), close (close PR without merging)",
+            description: "PR action",
           },
           title: { type: "string", description: "PR title (required for create)" },
           body: { type: "string", description: "PR description/body (for create)" },
@@ -417,21 +421,20 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "gh_issue",
-      description: "GitHub Issue operations via gh CLI. Create, view, list, close, comment on issues.",
+      description: "GitHub Issue operations via `gh` CLI. Create, view, list, close, reopen, or comment on issues.\n\nUSE for: any GitHub issue workflow.\n\nDO NOT use for: PRs (use `gh_pr`); local TODO tracking (use `TaskCreate` / `TodoWrite`).",
       parameters: {
-        type: "object",
-        properties: {
+        type: "object", properties: {
           action: {
             type: "string",
             enum: ["create", "view", "list", "close", "reopen", "comment"],
-            description: "Issue action: create (open new issue), view (show issue details), list (list issues), close (close issue), reopen (reopen closed issue), comment (add comment to issue)",
+            description: "Issue action",
           },
           title: { type: "string", description: "Issue title (required for create)" },
           body: { type: "string", description: "Issue description (for create/comment)" },
           issue: { type: "string", description: "Issue number or URL (for view/close/reopen/comment)" },
           state: { type: "string", enum: ["open", "closed", "all"], description: "Filter issues by state (for list)" },
-          label: { type: "string", description: "Filter by label (for list, comma-separated)" },
-          assignee: { type: "string", description: "Filter by assignee (for list)" },
+          label: { type: "string", description: "Filter by label (comma-separated)" },
+          assignee: { type: "string", description: "Filter by assignee" },
           limit: { type: "number", description: "Max issues to list (default 20)" },
           json: { type: "boolean", description: "If true, return raw JSON output" },
         },
@@ -443,14 +446,13 @@ export const TOOL_DEFS = [
     type: "function",
     function: {
       name: "gh_repo",
-      description: "GitHub repository info via gh CLI. View repo details, list repos, view README.",
+      description: "GitHub repository info via `gh` CLI. View repo details, list user repos, view README, clone, or create new repo.\n\nUSE for: GitHub repo lookup, listing the user's repos, or creating a new GitHub repo.\n\nDO NOT use for: cloning via local protocol (use `bash git clone`); non-GitHub operations.",
       parameters: {
-        type: "object",
-        properties: {
+        type: "object", properties: {
           action: {
             type: "string",
             enum: ["view", "list", "readme", "clone", "create"],
-            description: "Repo action: view (show repo details), list (list user repos), readme (view README), clone (clone repo), create (create new repo)",
+            description: "Repo action",
           },
           repo: { type: "string", description: "Repository (owner/repo format, for view/clone)" },
           url: { type: "string", description: "URL to clone (for clone)" },

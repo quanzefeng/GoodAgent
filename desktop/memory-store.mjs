@@ -20,6 +20,10 @@ const FTS_PATH = join(MEM_DIR, "memory-fts.db");
 
 const MAX_INDEX_LINES = 200;
 const MAX_INDEX_BYTES = 25000;
+// Phase 3: hard cap on project-memory files. When appendProjectMemory() is
+// about to create a NEW one and the count exceeds this, the oldest (by mtime)
+// is deleted first. User / feedback / reference memories are not affected.
+const MAX_PROJECT_MEMORIES = 30;
 
 if (!existsSync(MEM_DIR)) mkdirSync(MEM_DIR, { recursive: true });
 
@@ -463,9 +467,39 @@ export function appendProjectMemory(content) {
     }
   }
 
+  // P3: cap project memories at MAX_PROJECT_MEMORIES. Drop the oldest one
+  // (by mtime) to make room. Keeps the working set small enough for
+  // per-turn context selection to stay useful.
+  enforceProjectMemoryCap();
+
   // No similar memory found — create new
   const name = "memory_" + Date.now().toString(36);
   return createMemory(name, "Project memory", "project", safeContent);
+}
+
+/**
+ * If there are more than MAX_PROJECT_MEMORIES project-type memory files,
+ * delete the oldest ones (by mtime) until the count is within the cap.
+ * User, feedback, and reference memories are NOT touched.
+ * @returns {{ removed: number, names: string[] }}
+ */
+export function enforceProjectMemoryCap() {
+  const all = listMemories();
+  const projects = all
+    .filter(m => m.type === "project")
+    .sort((a, b) => (a.mtimeMs || 0) - (b.mtimeMs || 0));  // oldest first
+  const overflow = projects.length - MAX_PROJECT_MEMORIES;
+  if (overflow <= 0) return { removed: 0, names: [] };
+  const toRemove = projects.slice(0, overflow);
+  const removed = [];
+  for (const m of toRemove) {
+    const r = deleteMemory(m.filename);
+    if (r?.ok) removed.push(m.filename);
+  }
+  if (removed.length > 0) {
+    console.log(`[memory-store] cap reached: removed ${removed.length} oldest project memory(ies): ${removed.join(", ")}`);
+  }
+  return { removed: removed.length, names: removed };
 }
 
 /**

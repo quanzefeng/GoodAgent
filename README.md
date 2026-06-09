@@ -5,9 +5,23 @@
 
 ---
 
+## 产品预览 / Preview
+
+![主对话界面 / Main Chat Interface](docs/screenshots/01-main-chat.png)
+
+*主对话界面：左侧会话列表 + 工作目录，中间流式对话区，底部输入框配 4 个智能开关（计划模式 / 知识库 / 联网搜索 / 深度推理）*  
+*Main chat interface: session list + workspace on the left, streaming conversation in the middle, input box with 4 smart toggles (Plan Mode / Knowledge Base / Web Search / Deep Reasoning) at the bottom*
+
+---
+
 ## 项目简介 / Introduction
 
 **中文**：AideAgent 是一款桌面 AI 助手，支持多种大语言模型（DeepSeek、Claude、GLM、Qwen、MiniMax 等），内置丰富的工具集，可以帮你编程、搜索、管理文件、操作 Git、查阅知识库，让 AI 真正成为一个能干的助手。
+
+![功能概览 / Features Overview](docs/screenshots/03-features-overview.png)
+
+*Agent 自主介绍：28 个内置工具 / 混合 RAG / 持久记忆 / 自进化 / Hook 系统 / 微信机器人 / 计划模式 一应俱全*  
+*Self-introduction by the Agent: 28 built-in tools / hybrid RAG / persistent memory / self-evolution / Hook system / WeChat bot / plan mode — all in one*
 
 **English**: AideAgent is a desktop AI assistant supporting multiple LLMs (DeepSeek, Claude, GLM, Qwen, MiniMax, etc.) with a rich built-in toolset. It helps you code, search, manage files, operate Git, and query knowledge bases — making AI a truly capable assistant.
 
@@ -123,6 +137,12 @@ Built-in 8 provider presets with one-click switching. Supports both OpenAI-compa
 - **MRL 无损压缩**：自动检测模型是否支持 Matryoshka 嵌入（如 qwen3-embedding），原生 1024 维无损压缩到 384 维
 - **智能截断**：自动检测 Ollama 模型上下文长度，按模型能力截断嵌入文本
 - **即时注入**：相关笔记自动注入到对话 system prompt 中
+
+
+![知识库搜索结果 / Knowledge Base Search Results](docs/screenshots/02-knowledge-base-search.png)
+
+*混合 RAG 检索：FTS5 关键词 + 向量语义搜索，RRF 融合后取最相关内容注入上下文*  
+*Hybrid RAG search: FTS5 keyword + vector semantic, fused via RRF for optimal relevance*
 
 **English**: Connects to Obsidian vault for local knowledge retrieval.
 
@@ -400,6 +420,13 @@ npm run dist:win     # 打包 Windows / Build Windows
 npm run dist:mac     # 打包 macOS / Build macOS
 npm run dist:linux   # 打包 Linux / Build Linux
 ```
+
+### 项目结构 / Project Structure
+
+![技术栈与本地优先架构 / Tech Stack & Local-First Architecture](docs/screenshots/04-tech-stack.png)
+
+*核心技术细节：本地优先架构（MiniLM-L6 离线嵌入 / 已索引 198 篇 / 4 类记忆 / 0 远程依赖）*  
+*Core technical details: local-first architecture (MiniLM-L6 offline embedding / 198 indexed notes / 4 memory types / zero remote dependencies)*
 
 ### 项目结构 / Project Structure
 
