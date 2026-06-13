@@ -329,6 +329,11 @@ export function registerIpcHandlers() {
   ipcMain.handle("kb:update-note", async (_e, { path: notePath, content }) => kb.updateNote(notePath, content));
   ipcMain.handle("kb:delete-note", async (_e, path) => kb.deleteNote(path));
 
+  // ── Knowledge Base Watcher IPC ────────────────────────────
+  ipcMain.handle("kb:watcher-start", async () => kb.startWatcher());
+  ipcMain.handle("kb:watcher-stop", async () => kb.stopWatcher());
+  ipcMain.handle("kb:watcher-status", async () => ({ active: kb.isWatcherActive() }));
+
   // ── System Prompt Profile Store IPC ─────────────────────
   ipcMain.handle("prompt:list", async () => {
     return loadPromptProfiles();

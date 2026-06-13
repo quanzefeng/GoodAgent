@@ -11,7 +11,7 @@
 import { join, relative, extname, basename, dirname } from "path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "os";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, unlinkSync, watch } from "fs";
 import { DatabaseSync } from "node:sqlite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,7 +22,191 @@ const DB_PATH = join(DATA_DIR, "knowledge.db");
 const CONFIG_PATH = join(DATA_DIR, "kb-config.json");
 let _embeddingDim = 384; // Auto-detected at runtime from the actual embedding model
 
+// ── Chunking configuration ──────────────────────────────
+const CHUNK_SIZE = 500;   // chars per chunk (fixed-size fallback)
+const CHUNK_OVERLAP = 100; // overlap between consecutive fixed-size chunks
+
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+
+// ── File Watcher ─────────────────────────────────────────────
+/** @type {import("fs").FSWatcher | null} */
+let _watcher = null;
+let _watcherTimer = null;
+const WATCHER_DEBOUNCE_MS = 500;
+
+/**
+ * Debounce helper — coalesces rapid fs.watch events into a single call.
+ * @param {() => void} fn
+ * @returns {() => void}
+ */
+function debounced(fn) {
+  return () => {
+    if (_watcherTimer) clearTimeout(_watcherTimer);
+    _watcherTimer = setTimeout(() => { _watcherTimer = null; fn(); }, WATCHER_DEBOUNCE_MS);
+  };
+}
+
+/**
+ * Re-index a single file from the vault (called by watcher on change).
+ * Scans the file, splits into chunks, replaces old chunks/FTS/embedding.
+ * Silently ignores non-markdown files and files outside vault.
+ * @param {string} relPath - relative path within the vault
+ */
+async function reindexSingleFile(relPath) {
+  if (!_vaultPath) return;
+  if (!relPath.endsWith(".md")) return;
+  const fullPath = join(_vaultPath, relPath);
+  if (!existsSync(fullPath)) return;
+
+  try {
+    const content = readFileSync(fullPath, "utf-8");
+    const stat = statSync(fullPath);
+    const title = extractTitle(content, basename(relPath));
+    const tags = extractTags(content);
+    const body = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").replace(/#{1,6}\s+/g, "").trim();
+
+    const db = getDb();
+    const existing = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(relPath);
+    const noteId = existing ? Number(existing.id) : null;
+
+    if (noteId) {
+      // Update existing note
+      db.prepare("UPDATE kb_notes SET title=?, tags=?, word_count=?, mtime_ms=?, updated_at=? WHERE id=?")
+        .run(title, JSON.stringify(tags), body.length, stat.mtimeMs, new Date().toISOString(), noteId);
+
+      // Remove old chunks (cascade deletes FTS + embeddings)
+      db.prepare("DELETE FROM kb_chunks WHERE note_id = ?").run(noteId);
+    } else {
+      // New note
+      const result = db.prepare(
+        "INSERT INTO kb_notes(rel_path, filename, title, tags, word_count, mtime_ms, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)"
+      ).run(relPath, basename(relPath), title, JSON.stringify(tags), body.length, stat.mtimeMs, new Date().toISOString(), new Date().toISOString());
+      const newNoteId = Number(result.lastInsertRowid);
+      // Re-chunk the new note
+      const chunks = splitIntoChunks(body, title);
+      if (chunks.length === 0) chunks.push({ heading: title, content: stripMarkdown(body) || "" });
+      const max = getEffectiveMaxBodyChars();
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        const chunkResult = db.prepare(
+          "INSERT INTO kb_chunks(note_id, chunk_index, heading, content) VALUES (?,?,?,?)"
+        ).run(newNoteId, ci, chunk.heading, chunk.content);
+        const chunkId = Number(chunkResult.lastInsertRowid);
+        ftsInsertChunk(chunkId, chunk.heading, chunk.content);
+        try {
+          const embedding = await embedText((title + "\n" + chunk.heading + "\n" + chunk.content).slice(0, max));
+          if (embedding) {
+            db.prepare("INSERT INTO kb_embeddings(chunk_id, embedding, dim) VALUES (?,?,?)")
+              .run(chunkId, vectorToBuffer(embedding), _embeddingDim);
+          }
+        } catch { /* ignored */ }
+      }
+      return;
+    }
+
+    // For existing note, re-chunk and re-embed
+    const chunks = splitIntoChunks(body, title);
+    if (chunks.length === 0) chunks.push({ heading: title, content: stripMarkdown(body) || "" });
+    const max = getEffectiveMaxBodyChars();
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      const chunkResult = db.prepare(
+        "INSERT INTO kb_chunks(note_id, chunk_index, heading, content) VALUES (?,?,?,?)"
+      ).run(noteId, ci, chunk.heading, chunk.content);
+      const chunkId = Number(chunkResult.lastInsertRowid);
+      ftsInsertChunk(chunkId, chunk.heading, chunk.content);
+      try {
+        const embedding = await embedText((title + "\n" + chunk.heading + "\n" + chunk.content).slice(0, max));
+        if (embedding) {
+          db.prepare("INSERT INTO kb_embeddings(chunk_id, embedding, dim) VALUES (?,?,?)")
+            .run(chunkId, vectorToBuffer(embedding), _embeddingDim);
+        }
+      } catch { /* ignored */ }
+    }
+
+    console.log(`[kb-watcher] re-indexed: ${relPath} (${chunks.length} chunks)`);
+  } catch (/** @type {any} */ e) {
+    console.error(`[kb-watcher] failed to re-index ${relPath}:`, e.message);
+  }
+}
+
+/**
+ * Start watching the vault directory for changes.
+ * Automatically re-indexes files on add/change via debounced fs.watch.
+ * Silently no-ops if the vault is not set or already watching.
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export function startWatcher() {
+  if (!_vaultPath || !existsSync(_vaultPath)) return { ok: false, error: "vault not set" };
+  if (_watcher) return { ok: true, error: "already watching" };
+
+  const processChange = debounced(async () => {
+    // Full sync: scan vault and diff against DB, re-index changed/new files
+    // Since fs.watch doesn't give us reliable "which file changed" on all platforms,
+    // we do a lightweight scan — compare mtime_ms against DB records.
+    try {
+      const db = getDb();
+      const files = scanVault(_vaultPath, _vaultPath);
+      let updated = 0;
+      for (const file of files) {
+        const row = db.prepare("SELECT mtime_ms FROM kb_notes WHERE rel_path = ?").get(file.relPath);
+        if (!row || Number(row.mtime_ms) !== file.mtimeMs) {
+          await reindexSingleFile(file.relPath);
+          updated++;
+        }
+      }
+
+      // Remove notes whose files no longer exist
+      const indexed = db.prepare("SELECT rel_path FROM kb_notes").all();
+      const existingPaths = new Set(files.map(/** @param {any} f */ f => f.relPath));
+      for (const row of indexed) {
+        if (!existingPaths.has(String(row.rel_path))) {
+          const nr = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(String(row.rel_path));
+          if (nr) {
+            db.prepare("DELETE FROM kb_chunks WHERE note_id = ?").run(Number(nr.id));
+            db.prepare("DELETE FROM kb_notes WHERE rel_path = ?").run(String(row.rel_path));
+            updated++;
+          }
+        }
+      }
+      if (updated > 0) console.log(`[kb-watcher] sync: ${updated} file(s) updated`);
+    } catch (/** @type {any} */ e) {
+      console.error("[kb-watcher] sync error:", e.message);
+    }
+  });
+
+  try {
+    _watcher = watch(_vaultPath, { recursive: true }, processChange);
+    console.log(`[kb-watcher] started on: ${_vaultPath}`);
+    return { ok: true };
+  } catch (/** @type {any} */ e) {
+    console.error("[kb-watcher] failed to start:", e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
+/**
+ * Check whether the vault watcher is currently active.
+ * @returns {boolean}
+ */
+export function isWatcherActive() {
+  return !!_watcher;
+}
+
+/**
+ * Stop the vault watcher.
+ */
+export function stopWatcher() {
+  if (_watcher) {
+    try { _watcher.close(); } catch { /* ignored */ }
+    _watcher = null;
+    console.log("[kb-watcher] stopped");
+  }
+  if (_watcherTimer) {
+    clearTimeout(_watcherTimer);
+    _watcherTimer = null;
+  }
+}
 
 /** @param {string} relPath @returns {boolean} */
 function isSafeVaultPath(relPath) {
@@ -65,8 +249,12 @@ export function getConfig() { return { ..._config, vaultPath: _vaultPath }; }
 /** @param {string} path @returns {{ok:boolean, vault:string}|{error:string}} */
 export function setVault(path) {
   if (path !== "" && (typeof path !== "string" || !existsSync(path))) return { error: "path does not exist" };
+  // Stop previous watcher if any
+  stopWatcher();
   _vaultPath = path || "";
   saveConfig();
+  // Auto-start watcher if vault is set
+  if (_vaultPath) startWatcher();
   return { ok: true, vault: _vaultPath };
 }
 
@@ -97,6 +285,98 @@ export function getEffectiveMaxBodyChars() {
 function spaceCJK(text) {
   if (!text) return text;
   return text.replace(/([一-鿿㐀-䶿⺀-⻿])/g, "$1 ").trim();
+}
+
+/**
+ * Strip Markdown formatting for clean embedding text.
+ * Removes headings markers, bold/italic, wikilinks, code markers, strikethrough.
+ * Collapses multiple newlines.
+ * @param {string} text
+ * @returns {string}
+ */
+function stripMarkdown(text) {
+  return text
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/\*{1,3}_ {1,3}/g, "")
+    .replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+/**
+ * Split note body into semantic chunks.
+ *
+ * Strategy (tiered):
+ *   1. Heading-based — split on `##` (or higher) headings.
+ *      Each section becomes a chunk tagged with its heading for context.
+ *   2. Single-heading — if the note has only one `#` (title) or no headings,
+ *      or all sections have very short content, fall through to fixed-size.
+ *   3. Fixed-size — CHUNK_SIZE chars with CHUNK_OVERLAP.
+ *
+ * @param {string} rawBody - Full note body with frontmatter already stripped
+ * @param {string} [fallbackTitle] - Note title used when no heading is found
+ * @returns {Array<{heading:string, content:string}>}
+ */
+function splitIntoChunks(rawBody, fallbackTitle = "") {
+  /** @type {Array<{heading:string, content:string}>} */
+  const chunks = [];
+  const body = (rawBody || "").trim();
+  if (!body) return chunks;
+
+  // ── Attempt 1: heading-based split ──────────────────────────
+  // Match ## or higher (level 2-6). We skip # (level 1) because
+  // that's usually the document title, not a section divider.
+  const headingMatches = [...body.matchAll(/^(#{2,6})\s+(.+)$/gm)];
+
+  if (headingMatches.length >= 2) {
+    for (let i = 0; i < headingMatches.length; i++) {
+      const start = headingMatches[i].index;
+      const end = i + 1 < headingMatches.length ? headingMatches[i + 1].index : body.length;
+      const rawSection = body.slice(start, end).trim();
+      if (rawSection) {
+        chunks.push({
+          heading: headingMatches[i][2].trim(),
+          content: stripMarkdown(rawSection),
+        });
+      }
+    }
+  }
+
+  // ── Attempt 2: single # heading ────────────────────────────
+  if (chunks.length === 0) {
+    const h1Matches = [...body.matchAll(/^#{1}\s+(.+)$/gm)];
+    if (h1Matches.length >= 2) {
+      for (let i = 0; i < h1Matches.length; i++) {
+        const start = h1Matches[i].index;
+        const end = i + 1 < h1Matches.length ? h1Matches[i + 1].index : body.length;
+        const rawSection = body.slice(start, end).trim();
+        if (rawSection) {
+          chunks.push({
+            heading: h1Matches[i][2].trim(),
+            content: stripMarkdown(rawSection),
+          });
+        }
+      }
+    }
+  }
+
+  // ── Fallback: fixed-size with overlap ──────────────────────
+  if (chunks.length === 0) {
+    const clean = stripMarkdown(body);
+    let start = 0;
+    while (start < clean.length) {
+      const end = Math.min(start + CHUNK_SIZE, clean.length);
+      const piece = clean.slice(start, end).trim();
+      if (piece) {
+        chunks.push({ heading: start === 0 ? fallbackTitle : "", content: piece });
+      }
+      if (end >= clean.length) break;
+      start = end - CHUNK_OVERLAP;
+    }
+  }
+
+  return chunks;
 }
 
 // ── Frontmatter Parser ────────────────────────────────────
@@ -182,19 +462,46 @@ function getDb() {
     )
   `);
 
-  // Try FTS5 first, fallback to regular table
+  // ── Chunk-level tables ─────────────────────────────────
+  // kb_chunks: stores individual chunks per note
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS kb_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      note_id INTEGER NOT NULL,
+      chunk_index INTEGER DEFAULT 0,
+      heading TEXT DEFAULT '',
+      content TEXT NOT NULL,
+      FOREIGN KEY(note_id) REFERENCES kb_notes(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Chunk-level FTS
   try {
     _db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(
-        rel_path UNINDEXED,
-        title,
-        tags,
-        body,
+        chunk_id UNINDEXED,
+        heading,
+        content,
         tokenize='unicode61'
       )
     `);
+    // Verify the table actually has chunk_id column (schema migration check)
+    const cols = _db.prepare("PRAGMA table_info(kb_fts)").all();
+    const hasChunkId = cols.some(/** @param {any} c */ c => String(c.name) === "chunk_id");
+    if (!hasChunkId) {
+      // Old note-level schema — drop and recreate
+      _db.exec("DROP TABLE IF EXISTS kb_fts");
+      _db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(
+          chunk_id UNINDEXED,
+          heading,
+          content,
+          tokenize='unicode61'
+        )
+      `);
+    }
     _hasFts5 = true;
-    console.log("[kb] FTS5 available");
+    console.log("[kb] FTS5 available (chunk-level)");
   } catch (/** @type {any} */ e) {
     console.log("[kb] FTS5 not available, using LIKE search:", e.message);
     _hasFts5 = false;
@@ -202,21 +509,30 @@ function getDb() {
       _db.exec(`
         CREATE TABLE IF NOT EXISTS kb_fts (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          rel_path TEXT,
-          title TEXT,
-          tags TEXT,
-          body TEXT
+          chunk_id INTEGER,
+          heading TEXT,
+          content TEXT
         )
       `);
     } catch { /* ignored */ }
   }
 
+  // Chunk-level embeddings
+  // Check column structure first to avoid dropping data on each startup
+  {
+    const embCols = _db.prepare("PRAGMA table_info(kb_embeddings)").all();
+    const hasChunkId = embCols.some(/** @param {any} c */ c => String(c.name) === "chunk_id");
+    if (!hasChunkId) {
+      // Old note-level schema — drop and recreate
+      _db.exec("DROP TABLE IF EXISTS kb_embeddings");
+    }
+  }
   _db.exec(`
     CREATE TABLE IF NOT EXISTS kb_embeddings (
-      note_id INTEGER PRIMARY KEY,
+      chunk_id INTEGER PRIMARY KEY,
       embedding BLOB NOT NULL,
       dim INTEGER NOT NULL,
-      FOREIGN KEY(note_id) REFERENCES kb_notes(id) ON DELETE CASCADE
+      FOREIGN KEY(chunk_id) REFERENCES kb_chunks(id) ON DELETE CASCADE
     )
   `);
 
@@ -225,25 +541,33 @@ function getDb() {
 
 // ── FTS Operations ────────────────────────────────────────
 
-/** @param {string} relPath */
-function ftsDelete(relPath) {
-  try { getDb().prepare("DELETE FROM kb_fts WHERE rel_path = ?").run(relPath); } catch { /* ignored */ }
+/** Delete all FTS entries for chunks belonging to a specific note (by rel_path). */
+function ftsDeleteByRelPath(relPath) {
+  try {
+    const db = getDb();
+    // Get chunk IDs for this note, then delete them from FTS
+    const noteRows = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").all(relPath);
+    if (noteRows.length === 0) return;
+    const noteId = Number(noteRows[0].id);
+    const chunks = db.prepare("SELECT id FROM kb_chunks WHERE note_id = ?").all(noteId);
+    const stmt = db.prepare("DELETE FROM kb_fts WHERE chunk_id = ?");
+    for (const ch of chunks) { try { stmt.run(Number(ch.id)); } catch { /* ignored */ } }
+  } catch { /* ignored */ }
 }
 
-/** @param {string} relPath @param {string} title @param {string[]} tags @param {string} body */
-function ftsInsert(relPath, title, tags, body) {
+/** Delete a single chunk from FTS by chunk_id. */
+function ftsDeleteChunk(chunkId) {
+  try { getDb().prepare("DELETE FROM kb_fts WHERE chunk_id = ?").run(chunkId); } catch { /* ignored */ }
+}
+
+/** Insert a chunk into FTS. */
+function ftsInsertChunk(chunkId, heading, content) {
   try {
-    ftsDelete(relPath);
-    // Space CJK characters so unicode61 tokenizes them individually
-    // Prepend filename (without extension) to title so filenames are searchable
-    const filenameOnly = basename(relPath, ".md");
-    const spacedFilename = spaceCJK(filenameOnly);
-    const spacedTitle = spaceCJK(title || "");
-    const finalTitle = (spacedFilename + " " + spacedTitle).trim();
-    getDb().prepare("INSERT INTO kb_fts(rel_path, title, tags, body) VALUES (?,?,?,?)")
-      .run(relPath, finalTitle, spaceCJK((tags || []).join(" ")), spaceCJK(body || ""));
+    const spacedHeading = spaceCJK(heading || "");
+    getDb().prepare("INSERT INTO kb_fts(chunk_id, heading, content) VALUES (?,?,?)")
+      .run(chunkId, spacedHeading, spaceCJK(content || ""));
   } catch (/** @type {any} */ e) {
-    console.error("[kb] ftsInsert error:", e.message);
+    console.error("[kb] ftsInsertChunk error:", e.message);
   }
 }
 
@@ -252,20 +576,19 @@ function ftsSearch(query, limit) {
   const db = getDb();
   if (_hasFts5) {
     try {
-      // Split query into terms, space CJK chars in each, wrap each as phrase, join with AND
       const terms = query.split(/\s+/).filter(Boolean);
       const spacedTerms = terms.map(t => '"' + spaceCJK(t) + '"');
       const matchExpr = spacedTerms.join(" ");
       return db.prepare(
-        'SELECT rowid, rel_path, title, tags, snippet(kb_fts, 3, \'<mark>\', \'</mark>\', \'…\', 256) as snippet FROM kb_fts WHERE kb_fts MATCH ? ORDER BY rank LIMIT ?'
+        'SELECT rowid, chunk_id, heading, snippet(kb_fts, 2, \'<mark>\', \'</mark>\', \'…\', 256) as snippet FROM kb_fts WHERE kb_fts MATCH ? ORDER BY rank LIMIT ?'
       ).all(matchExpr, limit);
     } catch { /* ignored */ }
   }
   // LIKE fallback
   try {
     return db.prepare(
-      "SELECT id as rowid, rel_path, title, tags, body as snippet FROM kb_fts WHERE title LIKE ? OR tags LIKE ? OR body LIKE ? OR rel_path LIKE ? LIMIT ?"
-    ).all("%" + query + "%", "%" + query + "%", "%" + query + "%", "%" + query + "%", limit);
+      "SELECT id as rowid, chunk_id, heading, content as snippet FROM kb_fts WHERE heading LIKE ? OR content LIKE ? LIMIT ?"
+    ).all("%" + query + "%", "%" + query + "%", limit);
   } catch { return []; }
 }
 
@@ -562,20 +885,26 @@ function scanVault(dir, baseDir) {
 
 // ── Rebuild Index ─────────────────────────────────────────
 
-/** @param {Function} [progressCb] @returns {Promise<{ok:boolean, indexed:number, embedded:number, failed:number, total:number}|{error:string}>} */
+/** @param {Function} [progressCb] @returns {Promise<{ok:boolean, indexed:number, embedded:number, chunked:number, failed:number, total:number}|{error:string}>} */
 export async function rebuildIndex(progressCb) {
   if (!_vaultPath || !existsSync(_vaultPath)) return { error: "vault not set or not found" };
+
+  // Pause watcher during rebuild to avoid double-processing
+  const wasWatching = !!_watcher;
+  stopWatcher();
 
   const db = getDb();
   const notes = scanVault(_vaultPath, _vaultPath);
 
-  // Clear existing data
+  // Clear existing data (cascade deletes chunks/embeddings/FTS)
   try { db.exec("DELETE FROM kb_fts"); } catch { /* ignored */ }
   try { db.exec("DELETE FROM kb_embeddings"); } catch { /* ignored */ }
+  db.exec("DELETE FROM kb_chunks");
   db.exec("DELETE FROM kb_notes");
 
   let indexed = 0;
   let embedded = 0;
+  let chunked = 0;
   let failed = 0;
 
   for (const note of notes) {
@@ -584,44 +913,65 @@ export async function rebuildIndex(progressCb) {
       const result = db.prepare(
         "INSERT INTO kb_notes(rel_path, filename, title, tags, word_count, mtime_ms, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)"
       ).run(note.relPath, note.filename, note.title, JSON.stringify(note.tags), note.wordCount, note.mtimeMs, new Date().toISOString(), new Date().toISOString());
-      const noteId = result.lastInsertRowid;
+      const noteId = Number(result.lastInsertRowid);
 
-      // Insert into FTS
-      ftsInsert(note.relPath, note.title, note.tags, note.body);
-
-      // Generate embedding with retry (recovers from Ollama cold-start timeouts)
-      // Simple head truncation: text is capped at maxBodyChars (auto-detected from model context
-      // on first Ollama call, or set manually in KB settings)
-      const max = getEffectiveMaxBodyChars();
-      const text = (note.title + "\n" + note.body).slice(0, max);
-      let embedding = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        embedding = await embedText(text);
-        if (embedding) break;
-        if (attempt < 3) await new Promise(r => setTimeout(r, 1000));
+      // Split into chunks
+      const chunks = splitIntoChunks(note.body, note.title);
+      if (chunks.length === 0) {
+        // If no chunks created, create one from the whole body
+        chunks.push({ heading: note.title, content: stripMarkdown(note.body) || "" });
       }
-      if (embedding) {
-        db.prepare("INSERT INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
-          .run(noteId, vectorToBuffer(embedding), _embeddingDim);
-        embedded++;
-      } else {
-        console.error(`[kb] Embed failed after 3 attempts: ${note.relPath}`);
-        failed++;
+
+      const max = getEffectiveMaxBodyChars();
+
+      // Process each chunk
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+
+        // Insert chunk metadata
+        const chunkResult = db.prepare(
+          "INSERT INTO kb_chunks(note_id, chunk_index, heading, content) VALUES (?,?,?,?)"
+        ).run(noteId, ci, chunk.heading, chunk.content);
+        const chunkId = Number(chunkResult.lastInsertRowid);
+
+        // Index in FTS
+        ftsInsertChunk(chunkId, chunk.heading, chunk.content);
+
+        // Generate embedding (truncated to maxBodyChars)
+        const embedTextContent = (note.title + "\n" + chunk.heading + "\n" + chunk.content).slice(0, max);
+        let embedding = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          embedding = await embedText(embedTextContent);
+          if (embedding) break;
+          if (attempt < 3) await new Promise(r => setTimeout(r, 1000));
+        }
+        if (embedding) {
+          db.prepare("INSERT INTO kb_embeddings(chunk_id, embedding, dim) VALUES (?,?,?)")
+            .run(chunkId, vectorToBuffer(embedding), _embeddingDim);
+          embedded++;
+        } else {
+          console.error(`[kb] Embed failed for chunk ${ci} of ${note.relPath}`);
+          failed++;
+        }
+        chunked++;
       }
 
       indexed++;
-      if (progressCb) progressCb({ indexed, embedded, failed, total: notes.length });
+      if (progressCb) progressCb({ indexed, embedded, chunked, failed, total: notes.length });
     } catch (/** @type {any} */ e) {
       console.error(`[kb] Failed to index ${note.relPath}:`, e.message);
     }
   }
 
-  return { ok: true, indexed, embedded, failed, total: notes.length };
+  // Restart watcher if it was running before rebuild
+  if (wasWatching) startWatcher();
+
+  return { ok: true, indexed, embedded, chunked, failed, total: notes.length };
 }
 
 // ── Hybrid Search ─────────────────────────────────────────
 
-/** @param {string} query @param {number} [limit] @returns {Promise<Array<{id:number, rel_path:string, title:string, tags:string[], snippet:string, rrfScore:number}>>} */
+/** @param {string} query @param {number} [limit] @returns {Promise<Array<{id:number, rel_path:string, title:string, tags:string[], snippet:string, heading:string, rrfScore:number}>>} */
 export async function search(query, limit = 5) {
   if (!_vaultPath) return [];
   if (!query || !query.trim()) return [];
@@ -629,19 +979,19 @@ export async function search(query, limit = 5) {
   const db = getDb();
   const searchLimit = limit * 3; // Over-fetch for RRF
 
-  // 1. Text keyword search (FTS5 or LIKE fallback)
+  // 1. Chunk-level keyword search (FTS5 or LIKE fallback)
   let ftsResults = ftsSearch(query, searchLimit);
 
-  // 2. Vector similarity search
+  // 2. Chunk-level vector similarity search
   /** @type {Array<{id:number, similarity:number}>} */
   let vectorResults = [];
   try {
     const queryEmbedding = await embedText(query);
     if (queryEmbedding) {
-      const allEmbeddings = db.prepare("SELECT note_id, embedding FROM kb_embeddings").all();
+      const allEmbeddings = db.prepare("SELECT chunk_id, embedding FROM kb_embeddings").all();
       vectorResults = allEmbeddings
         .map(/** @param {any} row */ row => ({
-          id: row.note_id,
+          id: row.chunk_id,
           similarity: cosineSimilarity(queryEmbedding, bufferToVector(row.embedding)),
         }))
         .filter(/** @param {{similarity:number}} r */ r => r.similarity > 0.1)
@@ -650,48 +1000,72 @@ export async function search(query, limit = 5) {
     }
   } catch { /* ignored */ }
 
-  // 3. Fuse with RRF — use rel_path as the join key (FTS rowid != kb_notes.id)
-  const ftsIds = /** @type {{id:number, rank:number}[]} */ (ftsResults.map(/** @param {any} r @param {number} i */ (r, i) => {
-    const note = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(r.rel_path);
-    return note ? { id: Number(note.id), rank: i } : null;
-  }).filter(/** @returns {boolean} */ (x) => x != null));
-  const vecIds = vectorResults.map(/** @param {{id:number}} r @param {number} i */ (r, i) => ({ id: r.id, rank: i }));
+  // 3. Fuse chunk-level results via RRF, then aggregate by note
+  const ftsChunkIds = ftsResults.map(/** @param {any} r @param {number} i */ (r, i) => {
+    const cid = Number(r.chunk_id);
+    return cid > 0 ? { id: cid, rank: i } : null;
+  }).filter(/** @returns {boolean} */ (x) => x != null);
+  const vecChunkIds = vectorResults.map(/** @param {{id:number}} r @param {number} i */ (r, i) => ({ id: r.id, rank: i }));
 
-  let fused;
-  if (ftsIds.length > 0 && vecIds.length > 0) {
-    fused = reciprocalRankFusion([ftsIds, vecIds]);
-  } else if (ftsIds.length > 0) {
-    fused = ftsIds.map(/** @param {{id:number}} r @param {number} i */ (r, i) => ({ id: r.id, score: 1 / (60 + i + 1) }));
-  } else if (vecIds.length > 0) {
-    fused = vecIds.map(/** @param {{id:number}} r @param {number} i */ (r, i) => ({ id: r.id, score: 1 / (60 + i + 1) }));
+  let fusedChunks;
+  if (ftsChunkIds.length > 0 && vecChunkIds.length > 0) {
+    fusedChunks = reciprocalRankFusion([ftsChunkIds, vecChunkIds]);
+  } else if (ftsChunkIds.length > 0) {
+    fusedChunks = ftsChunkIds.map(/** @param {{id:number}} r @param {number} i */ (r, i) => ({ id: r.id, score: 1 / (60 + i + 1) }));
+  } else if (vecChunkIds.length > 0) {
+    fusedChunks = vecChunkIds.map(/** @param {{id:number}} r @param {number} i */ (r, i) => ({ id: r.id, score: 1 / (60 + i + 1) }));
   } else {
     return [];
   }
 
-  // 4. Return top-K with content
-  const topIds = fused.slice(0, limit);
-  const results = [];
+  // 4. Aggregate chunks by parent note — for each note, keep only its best chunk
+  /** @type {Map<number, {noteId:number, chunkId:number, score:number, heading:string, snippet:string}>} */
+  const bestPerNote = new Map();
+  const chunkToNote = new Map();
 
-  for (const { id, score } of topIds) {
+  // Pre-fetch all chunk→note mappings for fused chunk IDs
+  for (const { id: chunkId } of fusedChunks) {
     try {
-      const note = db.prepare("SELECT * FROM kb_notes WHERE id = ?").get(id);
-      if (!note) continue;
-      // Read full note content from file, fallback to FTS snippet
-      let snippet = String(note.title);
-      try {
-        const fullPath = join(_vaultPath, String(note.rel_path));
-        snippet = readFileSync(fullPath, "utf-8");
-      } catch {
-        const ftsMatch = ftsResults.find(/** @param {{rel_path:string}} r */ r => r.rel_path === String(note.rel_path));
-        snippet = ftsMatch?.snippet || String(note.title);
+      const row = db.prepare("SELECT note_id, heading, content FROM kb_chunks WHERE id = ?").get(chunkId);
+      if (row) {
+        const noteId = Number(row.note_id);
+        chunkToNote.set(chunkId, { noteId, heading: String(row.heading), content: String(row.content) });
       }
+    } catch { /* ignored */ }
+  }
+
+  for (const { id: chunkId, score } of fusedChunks) {
+    const mapping = chunkToNote.get(chunkId);
+    if (!mapping) continue;
+    const { noteId, heading, content } = mapping;
+
+    // Find FTS snippet for this chunk if available
+    const ftsMatch = ftsResults.find(/** @param {any} r */ r => Number(r.chunk_id) === chunkId);
+    const snippet = ftsMatch?.snippet || content.slice(0, 300);
+
+    if (!bestPerNote.has(noteId) || score > bestPerNote.get(noteId).score) {
+      bestPerNote.set(noteId, { noteId, chunkId, score, heading, snippet });
+    }
+  }
+
+  // 5. Sort notes by their best chunk's score, return top-K
+  const sortedNotes = [...bestPerNote.entries()]
+    .sort((a, b) => b[1].score - a[1].score)
+    .slice(0, limit);
+
+  const results = [];
+  for (const [noteId, best] of sortedNotes) {
+    try {
+      const note = db.prepare("SELECT * FROM kb_notes WHERE id = ?").get(noteId);
+      if (!note) continue;
       results.push({
         id: Number(note.id),
         rel_path: String(note.rel_path),
         title: String(note.title),
         tags: JSON.parse(String(note.tags || "[]")),
-        snippet,
-        rrfScore: score,
+        snippet: best.snippet,
+        heading: best.heading,
+        rrfScore: best.score,
       });
     } catch { /* ignored */ }
   }
@@ -759,21 +1133,33 @@ export async function createNote(relPath, content, tags = []) {
     const body = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").replace(/#{1,6}\s+/g, "").trim();
 
     const db = getDb();
-    const result = db.prepare(
+    const noteResult = db.prepare(
       "INSERT INTO kb_notes(rel_path, filename, title, tags, word_count, mtime_ms, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)"
     ).run(relPath, basename(relPath), title, JSON.stringify(noteTags), body.length, stat.mtimeMs, new Date().toISOString(), new Date().toISOString());
+    const noteId = Number(noteResult.lastInsertRowid);
 
-    ftsInsert(relPath, title, noteTags, body);
+    // Split into chunks and index each
+    const chunks = splitIntoChunks(body, title);
+    if (chunks.length === 0) chunks.push({ heading: title, content: stripMarkdown(body) || "" });
 
-    // Generate embedding (block until done so search is consistent)
-    try {
-      const max = getEffectiveMaxBodyChars();
-      const embedding = await embedText(title + "\n" + body.slice(0, max));
-      if (embedding) {
-          getDb().prepare("INSERT INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
-            .run(result.lastInsertRowid, vectorToBuffer(embedding), _embeddingDim);
+    const max = getEffectiveMaxBodyChars();
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      const chunkResult = db.prepare(
+        "INSERT INTO kb_chunks(note_id, chunk_index, heading, content) VALUES (?,?,?,?)"
+      ).run(noteId, ci, chunk.heading, chunk.content);
+      const chunkId = Number(chunkResult.lastInsertRowid);
+
+      ftsInsertChunk(chunkId, chunk.heading, chunk.content);
+
+      try {
+        const embedding = await embedText((title + "\n" + chunk.heading + "\n" + chunk.content).slice(0, max));
+        if (embedding) {
+          db.prepare("INSERT INTO kb_embeddings(chunk_id, embedding, dim) VALUES (?,?,?)")
+            .run(chunkId, vectorToBuffer(embedding), _embeddingDim);
         }
       } catch { /* ignored */ }
+    }
 
     return { ok: true, relPath, title };
   } catch (/** @type {any} */ e) { return { error: e.message }; }
@@ -799,20 +1185,36 @@ export async function updateNote(relPath, content) {
       "UPDATE kb_notes SET title=?, tags=?, word_count=?, mtime_ms=?, updated_at=? WHERE rel_path=?"
     ).run(title, JSON.stringify(tags), body.length, stat.mtimeMs, new Date().toISOString(), relPath);
 
-    ftsInsert(relPath, title, tags, body);
+    // Remove old chunks, then re-chunk
+    const noteRow = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(relPath);
+    const noteId = noteRow ? Number(noteRow.id) : null;
+    if (noteId) {
+      // Delete old chunks (cascade deletes FTS + embeddings)
+      db.prepare("DELETE FROM kb_chunks WHERE note_id = ?").run(noteId);
 
-    // Update embedding (block until done so search is consistent)
-    try {
+      // Split into new chunks
+      const chunks = splitIntoChunks(body, title);
+      if (chunks.length === 0) chunks.push({ heading: title, content: stripMarkdown(body) || "" });
+
       const max = getEffectiveMaxBodyChars();
-      const embedding = await embedText(title + "\n" + body.slice(0, max));
-      if (embedding) {
-        const note = getDb().prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(relPath);
-        if (note) {
-          getDb().prepare("REPLACE INTO kb_embeddings(note_id, embedding, dim) VALUES (?,?,?)")
-            .run(note.id, vectorToBuffer(embedding), _embeddingDim);
-        }
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        const chunkResult = db.prepare(
+          "INSERT INTO kb_chunks(note_id, chunk_index, heading, content) VALUES (?,?,?,?)"
+        ).run(noteId, ci, chunk.heading, chunk.content);
+        const chunkId = Number(chunkResult.lastInsertRowid);
+
+        ftsInsertChunk(chunkId, chunk.heading, chunk.content);
+
+        try {
+          const embedding = await embedText((title + "\n" + chunk.heading + "\n" + chunk.content).slice(0, getEffectiveMaxBodyChars()));
+          if (embedding) {
+            db.prepare("INSERT INTO kb_embeddings(chunk_id, embedding, dim) VALUES (?,?,?)")
+              .run(chunkId, vectorToBuffer(embedding), _embeddingDim);
+          }
+        } catch { /* ignored */ }
       }
-    } catch { /* ignored */ }
+    }
 
     return { ok: true, relPath, title };
   } catch (/** @type {any} */ e) { return { error: e.message }; }
@@ -828,14 +1230,14 @@ export function deleteNote(relPath) {
     // Delete file
     if (existsSync(fullPath)) unlinkSync(fullPath);
 
-    // Delete from DB
+    // Delete from DB (cascade: CASCADE deletes chunks → embeddings → auto-handles FK)
     const db = getDb();
-    const note = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(relPath);
-    if (note) {
-      db.prepare("DELETE FROM kb_embeddings WHERE note_id = ?").run(note.id);
+    // Delete chunks explicitly (cascades triggers FTS cleanup)
+    const noteRow = db.prepare("SELECT id FROM kb_notes WHERE rel_path = ?").get(relPath);
+    if (noteRow) {
+      db.prepare("DELETE FROM kb_chunks WHERE note_id = ?").run(Number(noteRow.id));
     }
     db.prepare("DELETE FROM kb_notes WHERE rel_path = ?").run(relPath);
-    ftsDelete(relPath);
 
     return { ok: true, relPath };
   } catch (/** @type {any} */ e) { return { error: e.message }; }
@@ -861,15 +1263,19 @@ export function getStatus() {
   const db = getDb();
   try {
     const noteCount = Number(db.prepare("SELECT COUNT(*) as count FROM kb_notes").get()?.count ?? 0);
+    const chunkCount = Number(db.prepare("SELECT COUNT(*) as count FROM kb_chunks").get()?.count ?? 0);
     const embeddedCount = Number(db.prepare("SELECT COUNT(*) as count FROM kb_embeddings").get()?.count ?? 0);
+    const watcherActive = !!_watcher;
     return {
       vault: _vaultPath,
       noteCount,
+      chunkCount,
       embeddedCount,
+      watcherActive,
       embeddingProvider: _config.embeddingProvider,
       maxBodyChars: _config.maxBodyChars,
       autoDetectedMaxBodyChars: _autoDetectedMaxBodyChars,
       effectiveMaxBodyChars: getEffectiveMaxBodyChars(),
     };
-  } catch { return { vault: _vaultPath, noteCount: 0, embeddedCount: 0 }; }
+  } catch { return { vault: _vaultPath, noteCount: 0, chunkCount: 0, embeddedCount: 0 }; }
 }
